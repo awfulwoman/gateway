@@ -2,11 +2,11 @@ from __future__ import annotations
 import argparse
 from mcp.server.fastmcp import FastMCP
 from gateway.config import Config
-from gateway.tools import calendar, reminders, contacts, email, obsidian, karakeep
+from gateway.tools import calendar, reminders, contacts, email, obsidian, karakeep, owntracks
 
 
 def create_server(config: Config) -> FastMCP:
-    mcp = FastMCP("gateway", host=config.server.host, port=config.server.port)
+    mcp = FastMCP("gateway", host=config.server.host, port=config.server.port, stateless_http=True)
 
     calendar.register(mcp)
     reminders.register(mcp)
@@ -21,6 +21,9 @@ def create_server(config: Config) -> FastMCP:
     karakeep.init(config.karakeep)
     karakeep.register(mcp)
 
+    owntracks.init(config.owntracks)
+    owntracks.register(mcp)
+
     return mcp
 
 
@@ -28,9 +31,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Gateway MCP server")
     parser.add_argument(
         "--transport",
-        choices=["stdio", "sse"],
-        default="sse",
-        help="Transport mode: 'sse' (default, HTTP server) or 'stdio' (for direct Claude Code integration)",
+        choices=["stdio", "http"],
+        default="http",
+        help="Transport mode: 'http' (default, stateless HTTP server) or 'stdio' (for direct Claude Code integration)",
     )
     args = parser.parse_args()
 
@@ -40,7 +43,7 @@ def main() -> None:
     if args.transport == "stdio":
         mcp.run(transport="stdio")
     else:
-        mcp.run(transport="sse")
+        mcp.run(transport="streamable-http")
 
 
 if __name__ == "__main__":

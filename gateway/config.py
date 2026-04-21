@@ -18,6 +18,14 @@ class KarakeepConfig(BaseModel):
     api_key: str = ""
 
 
+class OwnTracksConfig(BaseModel):
+    base_url: str = ""
+    username: str = ""
+    password: str = ""
+    owntracks_user: str = ""
+    owntracks_device: str = ""
+
+
 class ServerConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 4000
@@ -34,4 +42,5 @@ class Config(BaseSettings):
     imap: IMAPConfig = IMAPConfig()
     obsidian: ObsidianConfig = ObsidianConfig()
     karakeep: KarakeepConfig = KarakeepConfig()
+    owntracks: OwnTracksConfig = OwnTracksConfig()
     server: ServerConfig = ServerConfig()

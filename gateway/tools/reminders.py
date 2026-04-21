@@ -48,6 +48,27 @@ def _fetch_reminders(store, include_completed: bool) -> list:
     return found
 
 
+def _geocode(location_name: str):
+    """Return (lat, lon) for a location name, or None if geocoding fails."""
+    import CoreLocation
+    done = threading.Event()
+    result = [None]
+
+    geocoder = CoreLocation.CLGeocoder.alloc().init()
+
+    def cb(placemarks, error):
+        if placemarks and len(placemarks) > 0:
+            loc = placemarks[0].location()
+            if loc:
+                coord = loc.coordinate()
+                result[0] = (coord.latitude, coord.longitude)
+        done.set()
+
+    geocoder.geocodeAddressString_completionHandler_(location_name, cb)
+    done.wait(timeout=10)
+    return result[0]
+
+
 def _reminder_to_dict(r) -> dict:
     due = None
     if r.dueDateComponents():
@@ -94,8 +115,10 @@ def create_reminder(
     notes: str = "",
     list_name: str = "",
     priority: int = 0,
+    location_name: str = "",
+    arrive_or_leave: str = "arrive",
 ) -> str:
-    """Create a reminder. due_iso is an optional ISO 8601 date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS). priority: 0=none, 1=high, 5=medium, 9=low."""
+    """Create a reminder. due_iso is an optional ISO 8601 date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS). priority: 0=none, 1=high, 5=medium, 9=low. location_name triggers the reminder on arrival/departure; arrive_or_leave is 'arrive' (default) or 'leave'."""
     import EventKit
     import Foundation
 
@@ -127,9 +150,31 @@ def create_reminder(
             components.setMinute_(dt.minute)
         reminder.setDueDateComponents_(components)
 
+    if location_name:
+        import CoreLocation
+        coords = _geocode(location_name)
+        alarm = EventKit.EKAlarm.alloc().init()
+        proximity = (
+            EventKit.EKAlarmProximityLeave
+            if arrive_or_leave == "leave"
+            else EventKit.EKAlarmProximityEnter
+        )
+        alarm.setProximity_(proximity)
+        struct_loc = EventKit.EKStructuredLocation.locationWithTitle_(location_name)
+        if coords:
+            cl_loc = CoreLocation.CLLocation.alloc().initWithLatitude_longitude_(coords[0], coords[1])
+            struct_loc.setGeoLocation_(cl_loc)
+            struct_loc.setRadius_(200)
+        alarm.setStructuredLocation_(struct_loc)
+        reminder.addAlarm_(alarm)
+
     ok = store.saveReminder_commit_error_(reminder, True, None)
     if ok:
-        return json.dumps({"status": "created", "title": title})
+        result = {"status": "created", "title": title}
+        if location_name:
+            result["location"] = location_name
+            result["geocoded"] = coords is not None
+        return json.dumps(result)
     return json.dumps({"status": "error", "message": f"Failed to create reminder: {title}"})
 
 

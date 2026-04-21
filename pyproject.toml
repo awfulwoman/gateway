@@ -7,6 +7,7 @@ dependencies = [
     "pydantic-settings>=2.0",
     "pyobjc-framework-EventKit>=10",
     "pyobjc-framework-Contacts>=10",
+    "pyobjc-framework-CoreLocation>=10",
     "httpx>=0.25",
 ]
 

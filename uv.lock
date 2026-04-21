@@ -191,6 +191,7 @@ dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "pydantic-settings" },
     { name = "pyobjc-framework-contacts" },
+    { name = "pyobjc-framework-corelocation" },
     { name = "pyobjc-framework-eventkit" },
 ]
 
@@ -206,6 +207,7 @@ requires-dist = [
     { name = "mcp", extras = ["cli"], specifier = ">=1.0" },
     { name = "pydantic-settings", specifier = ">=2.0" },
     { name = "pyobjc-framework-contacts", specifier = ">=10" },
+    { name = "pyobjc-framework-corelocation", specifier = ">=10" },
     { name = "pyobjc-framework-eventkit", specifier = ">=10" },
 ]
 
@@ -556,6 +558,23 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/0a/37/53eba15f2e31950056c63b78732b73379ddbf946c5e6681f3b2773dcf282/pyobjc_framework_contacts-12.1-cp313-cp313t-macosx_10_13_universal2.whl", hash = "sha256:ab1d78f363dfede16bd5d951327332564bae86f68834d1e657dd18fe4dc12082", size = 12346, upload-time = "2025-11-14T09:43:08.865Z" },
     { url = "https://files.pythonhosted.org/packages/7e/8b/3200f69b77ea85fe69caa1afea444387b5e41bf44ceff11e772954d8a0d5/pyobjc_framework_contacts-12.1-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:65576c359eb31c5a5ef95e0c6714686a94bb154a508d791885ff7c33dbc8afa3", size = 12259, upload-time = "2025-11-14T09:43:10.705Z" },
     { url = "https://files.pythonhosted.org/packages/a2/81/0da71a88273aa73841cd3669431c30be627600162ec89cd170759dbffeaf/pyobjc_framework_contacts-12.1-cp314-cp314t-macosx_10_15_universal2.whl", hash = "sha256:1fac7feca7428047abf3f094fab678c4d0413296f34c30085119850509bc2905", size = 12410, upload-time = "2025-11-14T09:43:12.667Z" },
+]
+
+[[package]]
+name = "pyobjc-framework-corelocation"
+version = "12.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyobjc-core" },
+    { name = "pyobjc-framework-cocoa" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cc/79/b75885e0d75397dc2fe1ed9ca80be2b64c18b817f5fb924277cb1bf7b163/pyobjc_framework_corelocation-12.1.tar.gz", hash = "sha256:3674e9353f949d91dde6230ad68f6d5748a7f0424751e08a2c09d06050d66231", size = 53511, upload-time = "2025-11-14T10:13:43.384Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/71/57/1b670890fbf650f1a00afe5ee897ea3856a4a1417c2304c633ee2e978ed0/pyobjc_framework_corelocation-12.1-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:8c35ad29a062fea7d417fd8997a9309660ba7963f2847c004e670efbe6bb5b00", size = 12721, upload-time = "2025-11-14T09:44:41.185Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/09/3da1947a5908d70461596eda5a0dc486ae807dc1c5a1ce2bf98567b474be/pyobjc_framework_corelocation-12.1-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:616eec0ccfcdcff7696bccf88c1aa39935387e595b22dd4c14842567aa0986a6", size = 12736, upload-time = "2025-11-14T09:44:42.977Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/9a/e5e11ec90500ce2c809a46113d3ebd70dd4b4ce450072db9a85f86e9a30f/pyobjc_framework_corelocation-12.1-cp313-cp313t-macosx_10_13_universal2.whl", hash = "sha256:0a80ba8e8d9120eb80486235c483a0c734cb451265e5aa81bcf315f0e644eb00", size = 12867, upload-time = "2025-11-14T09:44:44.89Z" },
+    { url = "https://files.pythonhosted.org/packages/38/ef/cd24f05a406c4f8478117f7bf54a9a7753b6485b3fc645a5d0530b1fa34b/pyobjc_framework_corelocation-12.1-cp314-cp314-macosx_10_15_universal2.whl", hash = "sha256:3ed12521c457e484944fd91b1d19643d00596d3b0ea3455984c9e918a9c65138", size = 12720, upload-time = "2025-11-14T09:44:46.846Z" },
+    { url = "https://files.pythonhosted.org/packages/72/f5/f08ea0a1eacc0e45260a4395412af2f501f93aa91c7efc0cadd39ee75717/pyobjc_framework_corelocation-12.1-cp314-cp314t-macosx_10_15_universal2.whl", hash = "sha256:43aa6d5c273c5efa0960dbb05ae7165948f12a889cb0fdcba2e0099d98f4c78d", size = 12862, upload-time = "2025-11-14T09:44:48.688Z" },
 ]
 
 [[package]]
