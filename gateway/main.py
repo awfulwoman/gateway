@@ -6,7 +6,7 @@ from gateway.tools import calendar, reminders, contacts, email, obsidian, karake
 
 
 def create_server(config: Config) -> FastMCP:
-    mcp = FastMCP("gateway")
+    mcp = FastMCP("gateway", host=config.server.host, port=config.server.port)
 
     calendar.register(mcp)
     reminders.register(mcp)
@@ -40,7 +40,7 @@ def main() -> None:
     if args.transport == "stdio":
         mcp.run(transport="stdio")
     else:
-        mcp.run(transport="sse", host=config.server.host, port=config.server.port)
+        mcp.run(transport="sse")
 
 
 if __name__ == "__main__":
