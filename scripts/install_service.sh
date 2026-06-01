@@ -25,7 +25,7 @@ cat > "$PLIST_PATH" <<PLIST
         <string>run</string>
         <string>gateway</string>
         <string>--transport</string>
-        <string>sse</string>
+        <string>http</string>
     </array>
     <key>WorkingDirectory</key>
     <string>${REPO_DIR}</string>
@@ -82,11 +82,7 @@ VALUES
 
 launchctl bootstrap gui/$(id -u) "$PLIST_PATH" 2>/dev/null || launchctl load "$PLIST_PATH"
 echo "Gateway service installed and started."
-echo "MCP server running at http://127.0.0.1:4000/sse"
+echo "MCP server running at http://127.0.0.1:4000/mcp"
 echo ""
-echo "Add to ~/.claude/claude_desktop_config.json:"
-echo '  "mcpServers": {'
-echo '    "gateway": {'
-echo '      "url": "http://127.0.0.1:4000/sse"'
-echo '    }'
-echo '  }'
+echo "Register with Claude Code:"
+echo '  claude mcp add --transport http gateway --scope user http://127.0.0.1:4000/mcp'

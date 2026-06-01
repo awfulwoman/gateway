@@ -52,29 +52,17 @@ To remove:
 
 ## Claude Code integration
 
-After running the service, add to your `~/.claude.json` (or project `.claude/settings.json`):
+After running the service, register it at user scope (available across all projects). Use the CLI rather than editing config files directly — the `claude` CLI manages the internal storage format and may change it between versions.
 
-```json
-{
-  "mcpServers": {
-    "gateway": {
-      "url": "http://127.0.0.1:4000/sse"
-    }
-  }
-}
+
+```bash
+claude mcp add --transport http gateway --scope user http://127.0.0.1:4000/mcp
 ```
 
-Or for stdio mode (Claude Code spawns the process):
+Or for stdio mode (Claude Code spawns the process on demand):
 
-```json
-{
-  "mcpServers": {
-    "gateway": {
-      "command": "uv",
-      "args": ["--project", "/Users/awful/Code/awfulwoman/gateway", "run", "gateway", "--transport", "stdio"]
-    }
-  }
-}
+```bash
+claude mcp add --scope user gateway -- uv --project /path/to/gateway run gateway --transport stdio
 ```
 
 ## Configuration
