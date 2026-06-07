@@ -1,6 +1,6 @@
 from __future__ import annotations
 import click
-from gateway.cli.commands import calendar, reminders, contacts
+from gateway.cli.commands import calendar, reminders, contacts, email
 
 
 @click.group()
@@ -21,3 +21,4 @@ def main(ctx: click.Context, server: str) -> None:
 main.add_command(calendar.group, "calendar")
 main.add_command(reminders.group, "reminders")
 main.add_command(contacts.group, "contacts")
+main.add_command(email.group, "email")
