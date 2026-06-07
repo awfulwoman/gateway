@@ -326,3 +326,12 @@ def test_set_task_reminders_empty_clears_all():
     with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
         vikunja.set_task_reminders(10, "[]")
     mock_client.post.assert_called_once_with("/tasks/10", json={"reminders": []})
+
+
+def test_vikunja_registered_in_server():
+    from gateway.config import Config
+    from gateway import main
+
+    config = Config()
+    mcp = main.create_server(config)
+    assert mcp is not None
