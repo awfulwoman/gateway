@@ -1,4 +1,4 @@
-# gateway
+# Gateway Server + CLI tools
 
 MCP server providing Claude Code access to personal services: email, macOS Calendar/Reminders/Contacts, an Obsidian vault, and Karakeep bookmarks.
 
