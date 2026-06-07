@@ -241,3 +241,42 @@ def test_add_task_comment():
         result = json.loads(vikunja.add_task_comment(10, "Follow up needed"))
     assert result["id"] == 2
     mock_client.put.assert_called_once_with("/tasks/10/comments", json={"comment": "Follow up needed"})
+
+
+def test_list_task_relations():
+    vikunja.init(VikunjaConfig(base_url="http://test", api_token="tok"))
+    mock_client = _make_mock_client()
+    mock_client.get.return_value.json.return_value = {
+        "id": 10, "title": "Task A", "description": "", "done": False,
+        "due_date": None, "priority": 0, "project_id": 1, "labels": [],
+        "reminders": [],
+        "related_tasks": {"subtask": [{"id": 11, "title": "Sub A"}]}
+    }
+    with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
+        result = json.loads(vikunja.list_task_relations(10))
+    assert "subtask" in result
+    assert result["subtask"][0]["id"] == 11
+
+
+def test_add_task_relation():
+    vikunja.init(VikunjaConfig(base_url="http://test", api_token="tok"))
+    mock_client = _make_mock_client()
+    mock_client.put.return_value.json.return_value = {
+        "task_id": 10, "other_task_id": 11, "relation_kind": "subtask", "created": "2024-01-01T00:00:00Z"
+    }
+    with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
+        result = json.loads(vikunja.add_task_relation(10, 11, "subtask"))
+    assert result["status"] == "created"
+    mock_client.put.assert_called_once_with(
+        "/tasks/10/relations", json={"other_task_id": 11, "relation_kind": "subtask"}
+    )
+
+
+def test_delete_task_relation():
+    vikunja.init(VikunjaConfig(base_url="http://test", api_token="tok"))
+    mock_client = _make_mock_client()
+    mock_client.delete.return_value.json.return_value = {"message": "success"}
+    with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
+        result = json.loads(vikunja.delete_task_relation(10, "subtask", 11))
+    assert result["status"] == "deleted"
+    mock_client.delete.assert_called_once_with("/tasks/10/relations/subtask/11")

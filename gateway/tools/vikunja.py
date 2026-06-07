@@ -220,6 +220,30 @@ def add_task_comment(task_id: int, comment: str) -> str:
     })
 
 
+def list_task_relations(task_id: int) -> str:
+    """Get all relations for a Vikunja task. Returns a dict keyed by relation kind (e.g. 'subtask', 'blocking')."""
+    with _client() as c:
+        r = c.get(f"/tasks/{task_id}")
+        r.raise_for_status()
+    return json.dumps(r.json().get("related_tasks", {}))
+
+
+def add_task_relation(task_id: int, other_task_id: int, relation_kind: str) -> str:
+    """Create a relation between two Vikunja tasks. relation_kind: subtask, parenttask, related, duplicateof, duplicates, blocking, blocked, precedes, follows, copiedfrom, copiedto."""
+    with _client() as c:
+        r = c.put(f"/tasks/{task_id}/relations", json={"other_task_id": other_task_id, "relation_kind": relation_kind})
+        r.raise_for_status()
+    return json.dumps({"status": "created", "task_id": task_id, "other_task_id": other_task_id, "relation_kind": relation_kind})
+
+
+def delete_task_relation(task_id: int, relation_kind: str, other_task_id: int) -> str:
+    """Remove a relation between two Vikunja tasks. relation_kind and other_task_id must match an existing relation."""
+    with _client() as c:
+        r = c.delete(f"/tasks/{task_id}/relations/{relation_kind}/{other_task_id}")
+        r.raise_for_status()
+    return json.dumps({"status": "deleted", "task_id": task_id, "relation_kind": relation_kind, "other_task_id": other_task_id})
+
+
 def register(mcp) -> None:
     for fn in [
         list_projects,
@@ -235,5 +259,8 @@ def register(mcp) -> None:
         remove_task_label,
         list_task_comments,
         add_task_comment,
+        list_task_relations,
+        add_task_relation,
+        delete_task_relation,
     ]:
         mcp.tool()(fn)
