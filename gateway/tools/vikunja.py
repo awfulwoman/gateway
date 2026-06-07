@@ -64,10 +64,116 @@ def create_project(title: str, description: str = "", parent_project_id: int = 0
     return json.dumps(_project_summary(r.json()))
 
 
+def _task_summary(t: dict) -> dict:
+    return {
+        "id": t.get("id"),
+        "title": t.get("title", ""),
+        "description": t.get("description", ""),
+        "done": t.get("done", False),
+        "due_date": t.get("due_date"),
+        "priority": t.get("priority", 0),
+        "project_id": t.get("project_id"),
+        "labels": [{"id": l.get("id"), "title": l.get("title")} for l in t.get("labels", [])],
+        "reminders": t.get("reminders", []),
+        "related_tasks": t.get("related_tasks", {}),
+    }
+
+
+def list_tasks(
+    project_id: int = 0,
+    filter_by: str = "",
+    sort_by: str = "id",
+    order_by: str = "asc",
+    page: int = 1,
+) -> str:
+    """List Vikunja tasks. project_id filters to a specific project. filter_by accepts Vikunja filter syntax e.g. 'done=false'. sort_by can be id, title, due_date, priority, created, updated. order_by is asc or desc."""
+    params: dict = {"sort_by": sort_by, "order_by": order_by, "page": page}
+    if project_id and filter_by:
+        params["filter"] = f"project_id={project_id} && {filter_by}"
+    elif project_id:
+        params["filter"] = f"project_id={project_id}"
+    elif filter_by:
+        params["filter"] = filter_by
+    with _client() as c:
+        r = c.get("/tasks", params=params)
+        r.raise_for_status()
+    return json.dumps([_task_summary(t) for t in r.json()])
+
+
+def get_task(task_id: int) -> str:
+    """Get a Vikunja task by ID. Returns full detail including labels, reminders, and related tasks."""
+    with _client() as c:
+        r = c.get(f"/tasks/{task_id}")
+        r.raise_for_status()
+    return json.dumps(_task_summary(r.json()))
+
+
+def create_task(
+    project_id: int,
+    title: str,
+    description: str = "",
+    due_date: str = "",
+    priority: str = "",
+) -> str:
+    """Create a new Vikunja task in the given project. due_date is ISO 8601 (e.g. 2024-12-31T10:00:00Z). priority is 0 (none) through 5 (critical)."""
+    body: dict = {"title": title}
+    if description:
+        body["description"] = description
+    if due_date:
+        body["due_date"] = due_date
+    if priority:
+        body["priority"] = int(priority)
+    with _client() as c:
+        r = c.put(f"/projects/{project_id}/tasks", json=body)
+        r.raise_for_status()
+    return json.dumps(_task_summary(r.json()))
+
+
+def update_task(
+    task_id: int,
+    title: str = "",
+    description: str = "",
+    done: str = "",
+    due_date: str = "",
+    priority: str = "",
+) -> str:
+    """Update a Vikunja task. Only supplied (non-empty) fields are changed. done must be 'true' or 'false'. priority is 0-5."""
+    body: dict = {}
+    if title:
+        body["title"] = title
+    if description:
+        body["description"] = description
+    if done in ("true", "false"):
+        body["done"] = done == "true"
+    if due_date:
+        body["due_date"] = due_date
+    if priority:
+        body["priority"] = int(priority)
+    if not body:
+        return json.dumps({"status": "error", "message": "No fields to update"})
+    with _client() as c:
+        r = c.post(f"/tasks/{task_id}", json=body)
+        r.raise_for_status()
+    return json.dumps(_task_summary(r.json()))
+
+
+def delete_task(task_id: int) -> str:
+    """Delete a Vikunja task by ID."""
+    with _client() as c:
+        r = c.delete(f"/tasks/{task_id}")
+        r.raise_for_status()
+    return json.dumps({"status": "deleted", "task_id": task_id})
+
+
 def register(mcp) -> None:
     for fn in [
         list_projects,
         get_project,
         create_project,
+        list_tasks,
+        get_task,
+        create_task,
+        update_task,
+        delete_task,
     ]:
         mcp.tool()(fn)
