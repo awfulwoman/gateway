@@ -73,9 +73,9 @@ def _task_summary(t: dict) -> dict:
         "due_date": t.get("due_date"),
         "priority": t.get("priority", 0),
         "project_id": t.get("project_id"),
-        "labels": [{"id": l.get("id"), "title": l.get("title")} for l in t.get("labels", [])],
-        "reminders": t.get("reminders", []),
-        "related_tasks": t.get("related_tasks", {}),
+        "labels": [{"id": l.get("id"), "title": l.get("title")} for l in (t.get("labels") or [])],
+        "reminders": t.get("reminders") or [],
+        "related_tasks": t.get("related_tasks") or {},
     }
 
 
