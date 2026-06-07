@@ -179,3 +179,38 @@ def test_delete_task():
         result = json.loads(vikunja.delete_task(10))
     assert result["status"] == "deleted"
     mock_client.delete.assert_called_once_with("/tasks/10")
+
+
+def test_list_labels():
+    vikunja.init(VikunjaConfig(base_url="http://test", api_token="tok"))
+    mock_client = _make_mock_client()
+    mock_client.get.return_value.json.return_value = [
+        {"id": 1, "title": "urgent", "hex_color": "ff0000", "description": ""},
+        {"id": 2, "title": "home", "hex_color": "", "description": ""},
+    ]
+    with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
+        result = json.loads(vikunja.list_labels())
+    assert len(result) == 2
+    assert result[0]["id"] == 1
+    assert result[0]["title"] == "urgent"
+    mock_client.get.assert_called_once_with("/labels")
+
+
+def test_add_task_label():
+    vikunja.init(VikunjaConfig(base_url="http://test", api_token="tok"))
+    mock_client = _make_mock_client()
+    mock_client.put.return_value.json.return_value = {"label_id": 1, "created": "2024-01-01T00:00:00Z"}
+    with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
+        result = json.loads(vikunja.add_task_label(task_id=10, label_id=1))
+    assert result["status"] == "added"
+    mock_client.put.assert_called_once_with("/tasks/10/labels", json={"label_id": 1})
+
+
+def test_remove_task_label():
+    vikunja.init(VikunjaConfig(base_url="http://test", api_token="tok"))
+    mock_client = _make_mock_client()
+    mock_client.delete.return_value.json.return_value = {"message": "success"}
+    with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
+        result = json.loads(vikunja.remove_task_label(task_id=10, label_id=1))
+    assert result["status"] == "removed"
+    mock_client.delete.assert_called_once_with("/tasks/10/labels/1")

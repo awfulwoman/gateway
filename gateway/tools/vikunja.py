@@ -165,6 +165,31 @@ def delete_task(task_id: int) -> str:
     return json.dumps({"status": "deleted", "task_id": task_id})
 
 
+def list_labels() -> str:
+    """List all Vikunja labels accessible to the configured token."""
+    with _client() as c:
+        r = c.get("/labels")
+        r.raise_for_status()
+    labels = [{"id": l.get("id"), "title": l.get("title"), "hex_color": l.get("hex_color", "")} for l in r.json()]
+    return json.dumps(labels)
+
+
+def add_task_label(task_id: int, label_id: int) -> str:
+    """Attach a label to a Vikunja task. Use list_labels to find label IDs."""
+    with _client() as c:
+        r = c.put(f"/tasks/{task_id}/labels", json={"label_id": label_id})
+        r.raise_for_status()
+    return json.dumps({"status": "added", "task_id": task_id, "label_id": label_id})
+
+
+def remove_task_label(task_id: int, label_id: int) -> str:
+    """Remove a label from a Vikunja task."""
+    with _client() as c:
+        r = c.delete(f"/tasks/{task_id}/labels/{label_id}")
+        r.raise_for_status()
+    return json.dumps({"status": "removed", "task_id": task_id, "label_id": label_id})
+
+
 def register(mcp) -> None:
     for fn in [
         list_projects,
@@ -175,5 +200,8 @@ def register(mcp) -> None:
         create_task,
         update_task,
         delete_task,
+        list_labels,
+        add_task_label,
+        remove_task_label,
     ]:
         mcp.tool()(fn)
