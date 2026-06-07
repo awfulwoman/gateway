@@ -124,7 +124,13 @@ def list_relations(obj: dict, task_id: int, as_json: bool) -> None:
         data = client.call_tool(obj["server"], "list_task_relations", {"task_id": task_id})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
-    click.echo(json_mod.dumps(data, indent=2) if as_json else (json_mod.dumps(data, indent=2) if data else "No relations."))
+    if as_json:
+        click.echo(json_mod.dumps(data, indent=2))
+    elif not data:
+        click.echo("No relations.")
+    else:
+        lines = [f"  {kind}: #{t.get('id')} {t.get('title', '')}" for kind, tasks in data.items() for t in tasks]
+        click.echo("\n".join(lines))
 
 
 @tasks_group.command("add-relation")
@@ -193,7 +199,7 @@ def list_labels(obj: dict, as_json: bool) -> None:
         data = client.call_tool(obj["server"], "list_labels", {})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
-    click.echo(json_mod.dumps(data, indent=2) if as_json else ("\n".join(f"#{l['id']}  {l['title']}" for l in data) if data else "No labels."))
+    click.echo(json_mod.dumps(data, indent=2) if as_json else ("\n".join(f"#{lbl['id']}  {lbl['title']}" for lbl in data) if data else "No labels."))
 
 
 @tasks_group.command("add-label")
