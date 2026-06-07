@@ -36,7 +36,6 @@ def _all_keys():
         Contacts.CNContactPhoneNumbersKey,
         Contacts.CNContactPostalAddressesKey,
         Contacts.CNContactBirthdayKey,
-        Contacts.CNContactNoteKey,
         Contacts.CNContactUrlAddressesKey,
         Contacts.CNContactSocialProfilesKey,
     ]
@@ -77,7 +76,6 @@ def _contact_to_dict(c) -> dict:
         "addresses": addresses,
         "birthday": birthday,
         "urls": urls,
-        "note": str(c.note() or ""),
     }
 
 
