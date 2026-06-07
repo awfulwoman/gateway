@@ -1,5 +1,6 @@
 from __future__ import annotations
 import click
+from gateway.cli.commands import calendar
 
 
 @click.group()
@@ -15,3 +16,6 @@ def main(ctx: click.Context, server: str) -> None:
     """gw — gateway CLI. Requires the gateway server to be running."""
     ctx.ensure_object(dict)
     ctx.obj["server"] = server
+
+
+main.add_command(calendar.group, "calendar")
