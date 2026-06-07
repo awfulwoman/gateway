@@ -214,3 +214,30 @@ def test_remove_task_label():
         result = json.loads(vikunja.remove_task_label(task_id=10, label_id=1))
     assert result["status"] == "removed"
     mock_client.delete.assert_called_once_with("/tasks/10/labels/1")
+
+
+def test_list_task_comments():
+    vikunja.init(VikunjaConfig(base_url="http://test", api_token="tok"))
+    mock_client = _make_mock_client()
+    mock_client.get.return_value.json.return_value = [
+        {"id": 1, "comment": "First note", "created": "2024-01-01T00:00:00Z",
+         "author": {"username": "charlie"}}
+    ]
+    with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
+        result = json.loads(vikunja.list_task_comments(10))
+    assert result[0]["id"] == 1
+    assert result[0]["comment"] == "First note"
+    mock_client.get.assert_called_once_with("/tasks/10/comments")
+
+
+def test_add_task_comment():
+    vikunja.init(VikunjaConfig(base_url="http://test", api_token="tok"))
+    mock_client = _make_mock_client()
+    mock_client.put.return_value.json.return_value = {
+        "id": 2, "comment": "Follow up needed", "created": "2024-01-02T00:00:00Z",
+        "author": {"username": "charlie"}
+    }
+    with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
+        result = json.loads(vikunja.add_task_comment(10, "Follow up needed"))
+    assert result["id"] == 2
+    mock_client.put.assert_called_once_with("/tasks/10/comments", json={"comment": "Follow up needed"})

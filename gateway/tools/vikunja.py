@@ -190,6 +190,36 @@ def remove_task_label(task_id: int, label_id: int) -> str:
     return json.dumps({"status": "removed", "task_id": task_id, "label_id": label_id})
 
 
+def list_task_comments(task_id: int) -> str:
+    """Get all comments on a Vikunja task."""
+    with _client() as c:
+        r = c.get(f"/tasks/{task_id}/comments")
+        r.raise_for_status()
+    comments = [
+        {
+            "id": item.get("id"),
+            "comment": item.get("comment", ""),
+            "created": item.get("created"),
+            "author": item.get("author", {}).get("username", ""),
+        }
+        for item in r.json()
+    ]
+    return json.dumps(comments)
+
+
+def add_task_comment(task_id: int, comment: str) -> str:
+    """Add a comment to a Vikunja task."""
+    with _client() as c:
+        r = c.put(f"/tasks/{task_id}/comments", json={"comment": comment})
+        r.raise_for_status()
+    data = r.json()
+    return json.dumps({
+        "id": data.get("id"),
+        "comment": data.get("comment", ""),
+        "created": data.get("created"),
+    })
+
+
 def register(mcp) -> None:
     for fn in [
         list_projects,
@@ -203,5 +233,7 @@ def register(mcp) -> None:
         list_labels,
         add_task_label,
         remove_task_label,
+        list_task_comments,
+        add_task_comment,
     ]:
         mcp.tool()(fn)
