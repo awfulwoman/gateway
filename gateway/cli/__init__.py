@@ -1,6 +1,6 @@
 from __future__ import annotations
 import click
-from gateway.cli.commands import calendar, reminders, contacts, email, obsidian
+from gateway.cli.commands import calendar, reminders, contacts, email, obsidian, karakeep
 
 
 @click.group()
@@ -23,3 +23,4 @@ main.add_command(reminders.group, "reminders")
 main.add_command(contacts.group, "contacts")
 main.add_command(email.group, "email")
 main.add_command(obsidian.group, "notes")
+main.add_command(karakeep.group, "bookmarks")
