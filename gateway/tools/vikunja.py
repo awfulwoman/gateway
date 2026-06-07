@@ -244,6 +244,23 @@ def delete_task_relation(task_id: int, relation_kind: str, other_task_id: int) -
     return json.dumps({"status": "deleted", "task_id": task_id, "relation_kind": relation_kind, "other_task_id": other_task_id})
 
 
+def list_task_reminders(task_id: int) -> str:
+    """Get all reminders for a Vikunja task. Each reminder has a 'reminder' field (ISO 8601 datetime)."""
+    with _client() as c:
+        r = c.get(f"/tasks/{task_id}")
+        r.raise_for_status()
+    return json.dumps(r.json().get("reminders", []))
+
+
+def set_task_reminders(task_id: int, reminders_json: str) -> str:
+    """Replace all reminders on a Vikunja task. reminders_json is a JSON array of reminder objects, e.g. '[{"reminder": "2024-12-01T09:00:00Z"}]'. Pass '[]' to clear all reminders. Call list_task_reminders first to see existing reminders before modifying."""
+    reminders = json.loads(reminders_json)
+    with _client() as c:
+        r = c.post(f"/tasks/{task_id}", json={"reminders": reminders})
+        r.raise_for_status()
+    return json.dumps({"status": "updated", "task_id": task_id, "reminders": r.json().get("reminders", [])})
+
+
 def register(mcp) -> None:
     for fn in [
         list_projects,
@@ -262,5 +279,7 @@ def register(mcp) -> None:
         list_task_relations,
         add_task_relation,
         delete_task_relation,
+        list_task_reminders,
+        set_task_reminders,
     ]:
         mcp.tool()(fn)

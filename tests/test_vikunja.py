@@ -280,3 +280,49 @@ def test_delete_task_relation():
         result = json.loads(vikunja.delete_task_relation(10, "subtask", 11))
     assert result["status"] == "deleted"
     mock_client.delete.assert_called_once_with("/tasks/10/relations/subtask/11")
+
+
+def test_list_task_reminders():
+    vikunja.init(VikunjaConfig(base_url="http://test", api_token="tok"))
+    mock_client = _make_mock_client()
+    mock_client.get.return_value.json.return_value = {
+        "id": 10, "title": "Task", "description": "", "done": False,
+        "due_date": None, "priority": 0, "project_id": 1, "labels": [],
+        "related_tasks": {},
+        "reminders": [{"reminder": "2024-06-01T09:00:00Z", "relative_period": 0}]
+    }
+    with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
+        result = json.loads(vikunja.list_task_reminders(10))
+    assert len(result) == 1
+    assert result[0]["reminder"] == "2024-06-01T09:00:00Z"
+    mock_client.get.assert_called_once_with("/tasks/10")
+
+
+def test_set_task_reminders():
+    vikunja.init(VikunjaConfig(base_url="http://test", api_token="tok"))
+    mock_client = _make_mock_client()
+    mock_client.post.return_value.json.return_value = {
+        "id": 10, "title": "Task", "description": "", "done": False,
+        "due_date": None, "priority": 0, "project_id": 1, "labels": [],
+        "related_tasks": {},
+        "reminders": [{"reminder": "2024-06-01T09:00:00Z", "relative_period": 0}]
+    }
+    with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
+        result = json.loads(vikunja.set_task_reminders(10, '[{"reminder": "2024-06-01T09:00:00Z"}]'))
+    assert result["status"] == "updated"
+    mock_client.post.assert_called_once_with(
+        "/tasks/10", json={"reminders": [{"reminder": "2024-06-01T09:00:00Z"}]}
+    )
+
+
+def test_set_task_reminders_empty_clears_all():
+    vikunja.init(VikunjaConfig(base_url="http://test", api_token="tok"))
+    mock_client = _make_mock_client()
+    mock_client.post.return_value.json.return_value = {
+        "id": 10, "title": "Task", "description": "", "done": False,
+        "due_date": None, "priority": 0, "project_id": 1, "labels": [],
+        "related_tasks": {}, "reminders": []
+    }
+    with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
+        vikunja.set_task_reminders(10, "[]")
+    mock_client.post.assert_called_once_with("/tasks/10", json={"reminders": []})
