@@ -89,9 +89,9 @@ def list_tasks(
     """List Vikunja tasks. project_id filters to a specific project. filter_by accepts Vikunja filter syntax e.g. 'done=false'. sort_by can be id, title, due_date, priority, created, updated. order_by is asc or desc."""
     params: dict = {"sort_by": sort_by, "order_by": order_by, "page": page}
     if project_id and filter_by:
-        params["filter"] = f"project_id={project_id} && {filter_by}"
+        params["filter"] = f"project = {project_id} && {filter_by}"
     elif project_id:
-        params["filter"] = f"project_id={project_id}"
+        params["filter"] = f"project = {project_id}"
     elif filter_by:
         params["filter"] = filter_by
     with _client() as c:

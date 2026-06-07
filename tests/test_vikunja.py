@@ -106,7 +106,7 @@ def test_list_tasks_with_project_id():
     with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
         vikunja.list_tasks(project_id=5)
     call_params = mock_client.get.call_args[1]["params"]
-    assert call_params["filter"] == "project_id=5"
+    assert call_params["filter"] == "project = 5"
 
 
 def test_list_tasks_project_id_combined_with_filter():
@@ -116,7 +116,7 @@ def test_list_tasks_project_id_combined_with_filter():
     with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
         vikunja.list_tasks(project_id=5, filter_by="done=false")
     call_params = mock_client.get.call_args[1]["params"]
-    assert call_params["filter"] == "project_id=5 && done=false"
+    assert call_params["filter"] == "project = 5 && done=false"
 
 
 def test_get_task():
