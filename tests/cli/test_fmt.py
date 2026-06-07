@@ -189,3 +189,102 @@ def test_devices():
     out = fmt.devices(data)
     assert "charlie" in out
     assert "iphone" in out
+
+
+# --- reminder_lists ---
+
+def test_reminder_lists_empty():
+    assert fmt.reminder_lists([]) == "No reminder lists."
+
+
+def test_reminder_lists():
+    data = [{"name": "Shopping", "id": "r1"}, {"name": "Work", "id": "r2"}]
+    out = fmt.reminder_lists(data)
+    assert "Shopping" in out
+    assert "Work" in out
+
+
+# --- folders ---
+
+def test_folders_empty():
+    assert fmt.folders([]) == "No folders."
+
+
+def test_folders():
+    data = ["INBOX", "Sent", "Drafts"]
+    out = fmt.folders(data)
+    assert "INBOX" in out
+    assert "Sent" in out
+
+
+# --- bookmark_detail ---
+
+def test_bookmark_detail():
+    b = {"id": "abc123", "title": "Python docs", "url": "https://docs.python.org", "tags": ["python", "docs"], "summary": "Official Python documentation", "note": "Useful reference"}
+    out = fmt.bookmark_detail(b)
+    assert "abc123" in out
+    assert "https://docs.python.org" in out
+    assert "python" in out
+    assert "Useful reference" in out
+
+
+# --- tags ---
+
+def test_tags_empty():
+    assert fmt.tags([]) == "No tags."
+
+
+def test_tags():
+    data = [{"id": "t1", "name": "python", "count": 5}, {"id": "t2", "name": "tutorial", "count": 3}]
+    out = fmt.tags(data)
+    assert "python" in out
+    assert "5" in out
+
+
+# --- lists ---
+
+def test_lists_empty():
+    assert fmt.lists([]) == "No lists."
+
+
+def test_lists():
+    data = [{"id": "l1", "name": "Reading", "icon": "📚", "parent_id": None}]
+    out = fmt.lists(data)
+    assert "Reading" in out
+    assert "l1" in out
+
+
+# --- task_detail ---
+
+def test_task_detail():
+    t = {"id": 42, "title": "Write tests", "done": False, "due_date": "2026-06-10T00:00:00Z", "priority": 2, "project_id": 1, "description": "Needs TDD", "labels": [{"id": 1, "title": "urgent"}], "reminders": [], "related_tasks": {}}
+    out = fmt.task_detail(t)
+    assert "#42" in out
+    assert "Write tests" in out
+    assert "Needs TDD" in out
+    assert "urgent" in out
+
+
+# --- comments ---
+
+def test_comments_empty():
+    assert fmt.comments([]) == "No comments."
+
+
+def test_comments():
+    data = [{"id": 1, "comment": "Looks good", "created": "2026-06-07T10:00:00Z", "author": "charlie"}]
+    out = fmt.comments(data)
+    assert "Looks good" in out
+    assert "charlie" in out
+
+
+# --- location_history populated ---
+
+def test_location_history_populated():
+    data = {"count": 2, "points": [
+        {"lat": 51.5074, "lon": -0.1278, "timestamp": "2026-06-07T09:00:00+00:00"},
+        {"lat": 51.51, "lon": -0.12, "timestamp": "2026-06-07T10:30:00+00:00"},
+    ]}
+    out = fmt.location_history(data)
+    assert "Count: 2" in out
+    assert "51.5074" in out
