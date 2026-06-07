@@ -25,17 +25,19 @@ def call_tool(server_url: str, name: str, arguments: dict) -> list | dict:
             timeout=30,
         )
         resp.raise_for_status()
-    except httpx.ConnectError:
-        raise GatewayError(f"gateway server is not running (tried {server_url})")
+    except httpx.ConnectError as e:
+        raise GatewayError(f"gateway server is not running (tried {server_url})") from e
     except httpx.HTTPStatusError as e:
-        raise GatewayError(f"server error: {e.response.status_code}")
+        raise GatewayError(f"server error: {e.response.status_code}") from e
 
     data = _parse_response(resp)
 
     if "error" in data:
         raise GatewayError(data["error"].get("message", "unknown error"))
     if data.get("result", {}).get("isError"):
-        raise GatewayError(data["result"]["content"][0]["text"])
+        content = data["result"].get("content", [])
+        msg = content[0]["text"] if content else "tool returned an error"
+        raise GatewayError(msg)
 
     return json.loads(data["result"]["content"][0]["text"])
 
