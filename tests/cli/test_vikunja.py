@@ -36,9 +36,16 @@ def test_tasks_get():
 
 def test_tasks_create():
     with patch("gateway.cli.client.call_tool", return_value=TASK) as mock:
-        r = runner.invoke(main, ["tasks", "create", "1", "Write tests"])
+        r = runner.invoke(main, ["tasks", "create", "Write tests", "--project", "1"])
     assert r.exit_code == 0
     mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "create_task", {"project_id": 1, "title": "Write tests", "description": "", "due_date": "", "priority": ""})
+
+
+def test_tasks_create_defaults_to_inbox():
+    with patch("gateway.cli.client.call_tool", return_value=TASK) as mock:
+        r = runner.invoke(main, ["tasks", "create", "Write tests"])
+    assert r.exit_code == 0
+    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "create_task", {"project_id": 0, "title": "Write tests", "description": "", "due_date": "", "priority": ""})
 
 
 def test_tasks_delete():

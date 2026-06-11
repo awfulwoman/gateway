@@ -204,7 +204,7 @@ gw bookmarks search "rust" --json | jq '.[].url'
 gw tasks list [--project ID] [--filter EXPR] [--sort id|title|due_date|priority|created|updated] \
     [--order asc|desc] [--page N]
 gw tasks get TASK_ID
-gw tasks create PROJECT_ID TITLE [--description TEXT] [--due TEXT] [--priority TEXT]
+gw tasks create TITLE [--project ID] [--description TEXT] [--due TEXT] [--priority TEXT]
 gw tasks update TASK_ID [--title TEXT] [--description TEXT] [--done true|false] \
     [--due TEXT] [--priority TEXT]
 gw tasks delete TASK_ID
@@ -229,7 +229,8 @@ REMINDERS_JSON format: `'[{"reminder":"2026-06-10T09:00:00Z"}]'` or `'[]'` to cl
 gw tasks list --project 3 --sort due_date --order asc
 gw tasks list --filter "title = bug"
 gw tasks get 42
-gw tasks create 3 "Fix login bug" --due "2026-06-10" --priority high
+gw tasks create "Fix login bug" --project 3 --due "2026-06-10" --priority high
+gw tasks create "Quick capture"                     # -> Inbox
 gw tasks update 42 --done true
 gw tasks comment 42 "Investigated — root cause is JWT expiry"
 gw tasks add-relation 42 101 blocking
@@ -297,8 +298,7 @@ gw email unread --json | jq '.[].subject'
 gw bookmarks search "is:fav #devops" --json | jq '.[].url'
 
 # Create a task and immediately set a reminder
-PROJECT_ID=3
-TASK_ID=$(gw tasks create $PROJECT_ID "Deploy v2" --json | jq -r '.id')
+TASK_ID=$(gw tasks create "Deploy v2" --project 3 --json | jq -r '.id')
 gw tasks set-reminders $TASK_ID '[{"reminder":"2026-06-10T08:00:00Z"}]'
 ```
 

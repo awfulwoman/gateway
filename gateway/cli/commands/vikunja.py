@@ -40,15 +40,15 @@ def get_task(obj: dict, task_id: int, as_json: bool) -> None:
 
 
 @tasks_group.command("create")
-@click.argument("project-id", type=int)
 @click.argument("title")
+@click.option("--project", "project_id", default=0, type=int, help="Project ID; omit to create in Inbox.")
 @click.option("--description", default="")
 @click.option("--due", "due_date", default="")
 @click.option("--priority", default="")
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
 def create_task(obj: dict, project_id: int, title: str, description: str, due_date: str, priority: str, as_json: bool) -> None:
-    """Create a task in a project."""
+    """Create a task. Defaults to Inbox if --project is not given."""
     try:
         data = client.call_tool(obj["server"], "create_task", {"project_id": project_id, "title": title, "description": description, "due_date": due_date, "priority": priority})
     except client.GatewayError as e:

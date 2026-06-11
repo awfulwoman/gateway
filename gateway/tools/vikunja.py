@@ -108,14 +108,26 @@ def get_task(task_id: int) -> str:
     return json.dumps(_task_summary(r.json()))
 
 
+def _find_inbox_project_id() -> int:
+    with _client() as c:
+        r = c.get("/projects")
+        r.raise_for_status()
+    for p in r.json():
+        if (p.get("title") or "").strip().lower() == "inbox":
+            return int(p["id"])
+    raise ValueError("No project titled 'Inbox' found")
+
+
 def create_task(
-    project_id: int,
-    title: str,
+    project_id: int = 0,
+    title: str = "",
     description: str = "",
     due_date: str = "",
     priority: str = "",
 ) -> str:
-    """Create a new Vikunja task in the given project. due_date is ISO 8601 (e.g. 2024-12-31T10:00:00Z). priority is 0 (none) through 5 (critical)."""
+    """Create a new Vikunja task. If project_id is 0 (or omitted), the task is created in the user's Inbox project. due_date is ISO 8601 (e.g. 2024-12-31T10:00:00Z). priority is 0 (none) through 5 (critical)."""
+    if not project_id:
+        project_id = _find_inbox_project_id()
     body: dict = {"title": title}
     if description:
         body["description"] = description

@@ -146,6 +146,36 @@ def test_create_task():
     mock_client.put.assert_called_once_with("/projects/1/tasks", json={"title": "New task"})
 
 
+def test_create_task_defaults_to_inbox():
+    vikunja.init(VikunjaConfig(base_url="http://test", api_token="tok"))
+    mock_client = _make_mock_client()
+    mock_client.get.return_value.json.return_value = [
+        {"id": 1, "title": "Inbox", "description": "", "is_archived": False, "parent_project_id": 0},
+        {"id": 2, "title": "Work", "description": "", "is_archived": False, "parent_project_id": 0},
+    ]
+    mock_client.put.return_value.json.return_value = {
+        "id": 99, "title": "Quick capture", "description": "", "done": False,
+        "due_date": None, "priority": 0, "project_id": 1, "labels": []
+    }
+    with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
+        result = json.loads(vikunja.create_task(title="Quick capture"))
+    assert result["project_id"] == 1
+    mock_client.get.assert_called_once_with("/projects")
+    mock_client.put.assert_called_once_with("/projects/1/tasks", json={"title": "Quick capture"})
+
+
+def test_create_task_inbox_missing_raises():
+    import pytest
+    vikunja.init(VikunjaConfig(base_url="http://test", api_token="tok"))
+    mock_client = _make_mock_client()
+    mock_client.get.return_value.json.return_value = [
+        {"id": 2, "title": "Work", "description": "", "is_archived": False, "parent_project_id": 0},
+    ]
+    with patch("gateway.tools.vikunja.httpx.Client", return_value=mock_client):
+        with pytest.raises(ValueError):
+            vikunja.create_task(title="Quick capture")
+
+
 def test_update_task_partial():
     vikunja.init(VikunjaConfig(base_url="http://test", api_token="tok"))
     mock_client = _make_mock_client()
