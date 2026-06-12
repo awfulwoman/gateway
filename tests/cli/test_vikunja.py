@@ -3,8 +3,8 @@ from unittest.mock import patch
 from click.testing import CliRunner
 from gateway.cli import main
 
-TASK = {"id": 42, "title": "Write tests", "done": False, "due_date": "2026-06-10T00:00:00Z", "priority": 2, "project_id": 1, "description": "", "labels": [], "reminders": [], "related_tasks": {}}
-TASKS = [TASK]
+ISSUE = {"id": 42, "title": "Write tests", "done": False, "due_date": "2026-06-10T00:00:00Z", "priority": 2, "project_id": 1, "description": "", "labels": [], "reminders": [], "related_tasks": {}}
+ISSUES = [ISSUE]
 PROJECT = {"id": 1, "title": "Inbox", "description": "", "is_archived": False, "parent_project_id": None}
 PROJECTS = [PROJECT]
 COMMENTS = [{"id": 1, "comment": "Looks good", "created": "2026-06-07T10:00:00Z", "author": "charlie"}]
@@ -12,62 +12,62 @@ COMMENTS = [{"id": 1, "comment": "Looks good", "created": "2026-06-07T10:00:00Z"
 runner = CliRunner()
 
 
-def test_tasks_list():
-    with patch("gateway.cli.client.call_tool", return_value=TASKS) as mock:
-        r = runner.invoke(main, ["tasks", "list"])
+def test_issues_list():
+    with patch("gateway.cli.client.call_tool", return_value=ISSUES) as mock:
+        r = runner.invoke(main, ["issues", "list"])
     assert r.exit_code == 0
     assert "Write tests" in r.output
-    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "list_tasks", {"project_id": 0, "filter_by": "", "sort_by": "id", "order_by": "asc", "page": 1})
+    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "list_issues", {"project_id": 0, "filter_by": "", "sort_by": "id", "order_by": "asc", "page": 1})
 
 
-def test_tasks_list_with_project():
+def test_issues_list_with_project():
     with patch("gateway.cli.client.call_tool", return_value=[]) as mock:
-        runner.invoke(main, ["tasks", "list", "--project", "5"])
-    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "list_tasks", {"project_id": 5, "filter_by": "", "sort_by": "id", "order_by": "asc", "page": 1})
+        runner.invoke(main, ["issues", "list", "--project", "5"])
+    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "list_issues", {"project_id": 5, "filter_by": "", "sort_by": "id", "order_by": "asc", "page": 1})
 
 
-def test_tasks_get():
-    with patch("gateway.cli.client.call_tool", return_value=TASK) as mock:
-        r = runner.invoke(main, ["tasks", "get", "42"])
+def test_issues_get():
+    with patch("gateway.cli.client.call_tool", return_value=ISSUE) as mock:
+        r = runner.invoke(main, ["issues", "get", "42"])
     assert r.exit_code == 0
     assert "Write tests" in r.output
-    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "get_task", {"task_id": 42})
+    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "get_issue", {"issue_id": 42})
 
 
-def test_tasks_create():
-    with patch("gateway.cli.client.call_tool", return_value=TASK) as mock:
-        r = runner.invoke(main, ["tasks", "create", "Write tests", "--project", "1"])
+def test_issues_create():
+    with patch("gateway.cli.client.call_tool", return_value=ISSUE) as mock:
+        r = runner.invoke(main, ["issues", "create", "Write tests", "--project", "1"])
     assert r.exit_code == 0
-    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "create_task", {"project_id": 1, "title": "Write tests", "description": "", "due_date": "", "priority": ""})
+    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "create_issue", {"project_id": 1, "title": "Write tests", "description": "", "due_date": "", "priority": ""})
 
 
-def test_tasks_create_defaults_to_inbox():
-    with patch("gateway.cli.client.call_tool", return_value=TASK) as mock:
-        r = runner.invoke(main, ["tasks", "create", "Write tests"])
+def test_issues_create_defaults_to_inbox():
+    with patch("gateway.cli.client.call_tool", return_value=ISSUE) as mock:
+        r = runner.invoke(main, ["issues", "create", "Write tests"])
     assert r.exit_code == 0
-    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "create_task", {"project_id": 0, "title": "Write tests", "description": "", "due_date": "", "priority": ""})
+    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "create_issue", {"project_id": 0, "title": "Write tests", "description": "", "due_date": "", "priority": ""})
 
 
-def test_tasks_delete():
-    with patch("gateway.cli.client.call_tool", return_value={"status": "deleted", "task_id": 42}) as mock:
-        r = runner.invoke(main, ["tasks", "delete", "42"])
+def test_issues_delete():
+    with patch("gateway.cli.client.call_tool", return_value={"status": "deleted", "issue_id": 42}) as mock:
+        r = runner.invoke(main, ["issues", "delete", "42"])
     assert r.exit_code == 0
-    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "delete_task", {"task_id": 42})
+    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "delete_issue", {"issue_id": 42})
 
 
-def test_tasks_comments():
+def test_issues_comments():
     with patch("gateway.cli.client.call_tool", return_value=COMMENTS) as mock:
-        r = runner.invoke(main, ["tasks", "comments", "42"])
+        r = runner.invoke(main, ["issues", "comments", "42"])
     assert r.exit_code == 0
     assert "Looks good" in r.output
-    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "list_task_comments", {"task_id": 42})
+    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "list_issue_comments", {"issue_id": 42})
 
 
-def test_tasks_comment():
+def test_issues_comment():
     with patch("gateway.cli.client.call_tool", return_value={"id": 2, "comment": "LGTM", "created": "2026-06-07"}) as mock:
-        r = runner.invoke(main, ["tasks", "comment", "42", "LGTM"])
+        r = runner.invoke(main, ["issues", "comment", "42", "LGTM"])
     assert r.exit_code == 0
-    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "add_task_comment", {"task_id": 42, "comment": "LGTM"})
+    mock.assert_called_once_with("http://127.0.0.1:4000/mcp", "add_issue_comment", {"issue_id": 42, "comment": "LGTM"})
 
 
 def test_projects_list():

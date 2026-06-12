@@ -147,9 +147,9 @@ def lists(data: list) -> str:
     return "\n".join(f"{l['id']}  {l.get('icon', '')} {l['name']}" for l in data)
 
 
-def tasks(data: list) -> str:
+def issues(data: list) -> str:
     if not data:
-        return "No tasks."
+        return "No issues."
     lines = []
     for t in data:
         done = "x" if t.get("done") else " "
@@ -159,7 +159,7 @@ def tasks(data: list) -> str:
     return "\n".join(lines)
 
 
-def task_detail(t: dict) -> str:
+def issue_detail(t: dict) -> str:
     lines = [
         f"#{t['id']} {t['title']}",
         f"  Done:     {'yes' if t.get('done') else 'no'}",

@@ -129,23 +129,23 @@ def test_bookmarks():
     assert "abc123" in out
 
 
-# --- tasks ---
+# --- issues ---
 
-def test_tasks_empty():
-    assert fmt.tasks([]) == "No tasks."
+def test_issues_empty():
+    assert fmt.issues([]) == "No issues."
 
 
-def test_tasks():
+def test_issues():
     data = [{"id": 42, "title": "Write tests", "done": False, "due_date": "2026-06-10T00:00:00Z", "priority": 2, "project_id": 1, "description": "", "labels": [], "reminders": [], "related_tasks": {}}]
-    out = fmt.tasks(data)
+    out = fmt.issues(data)
     assert "#42" in out
     assert "Write tests" in out
     assert "2026-06-10" in out
 
 
-def test_tasks_done():
+def test_issues_done():
     data = [{"id": 1, "title": "Done thing", "done": True, "due_date": None, "priority": 0, "project_id": 1, "description": "", "labels": [], "reminders": [], "related_tasks": {}}]
-    out = fmt.tasks(data)
+    out = fmt.issues(data)
     assert "[x]" in out
 
 
@@ -254,11 +254,11 @@ def test_lists():
     assert "l1" in out
 
 
-# --- task_detail ---
+# --- issue_detail ---
 
-def test_task_detail():
+def test_issue_detail():
     t = {"id": 42, "title": "Write tests", "done": False, "due_date": "2026-06-10T00:00:00Z", "priority": 2, "project_id": 1, "description": "Needs TDD", "labels": [{"id": 1, "title": "urgent"}], "reminders": [], "related_tasks": {}}
-    out = fmt.task_detail(t)
+    out = fmt.issue_detail(t)
     assert "#42" in out
     assert "Write tests" in out
     assert "Needs TDD" in out

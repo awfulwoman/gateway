@@ -6,7 +6,7 @@ from gateway.cli import client, fmt
 
 @click.group()
 def tasks_group() -> None:
-    """Tasks (Vikunja)."""
+    """Issues (Vikunja)."""
 
 
 @tasks_group.command("list")
@@ -17,26 +17,26 @@ def tasks_group() -> None:
 @click.option("--page", default=1)
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
-def list_tasks(obj: dict, project_id: int, filter_by: str, sort_by: str, order_by: str, page: int, as_json: bool) -> None:
-    """List tasks."""
+def list_issues(obj: dict, project_id: int, filter_by: str, sort_by: str, order_by: str, page: int, as_json: bool) -> None:
+    """List issues."""
     try:
-        data = client.call_tool(obj["server"], "list_tasks", {"project_id": project_id, "filter_by": filter_by, "sort_by": sort_by, "order_by": order_by, "page": page})
+        data = client.call_tool(obj["server"], "list_issues", {"project_id": project_id, "filter_by": filter_by, "sort_by": sort_by, "order_by": order_by, "page": page})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
-    click.echo(json_mod.dumps(data, indent=2) if as_json else fmt.tasks(data))
+    click.echo(json_mod.dumps(data, indent=2) if as_json else fmt.issues(data))
 
 
 @tasks_group.command("get")
-@click.argument("task-id", type=int)
+@click.argument("issue-id", type=int)
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
-def get_task(obj: dict, task_id: int, as_json: bool) -> None:
-    """Get a task by ID."""
+def get_issue(obj: dict, issue_id: int, as_json: bool) -> None:
+    """Get an issue by ID."""
     try:
-        data = client.call_tool(obj["server"], "get_task", {"task_id": task_id})
+        data = client.call_tool(obj["server"], "get_issue", {"issue_id": issue_id})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
-    click.echo(json_mod.dumps(data, indent=2) if as_json else fmt.task_detail(data))
+    click.echo(json_mod.dumps(data, indent=2) if as_json else fmt.issue_detail(data))
 
 
 @tasks_group.command("create")
@@ -47,17 +47,17 @@ def get_task(obj: dict, task_id: int, as_json: bool) -> None:
 @click.option("--priority", default="")
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
-def create_task(obj: dict, project_id: int, title: str, description: str, due_date: str, priority: str, as_json: bool) -> None:
-    """Create a task. Defaults to Inbox if --project is not given."""
+def create_issue(obj: dict, project_id: int, title: str, description: str, due_date: str, priority: str, as_json: bool) -> None:
+    """Create an issue. Defaults to Inbox if --project is not given."""
     try:
-        data = client.call_tool(obj["server"], "create_task", {"project_id": project_id, "title": title, "description": description, "due_date": due_date, "priority": priority})
+        data = client.call_tool(obj["server"], "create_issue", {"project_id": project_id, "title": title, "description": description, "due_date": due_date, "priority": priority})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
     click.echo(json_mod.dumps(data, indent=2) if as_json else f"Created: #{data.get('id')} {data.get('title')}")
 
 
 @tasks_group.command("update")
-@click.argument("task-id", type=int)
+@click.argument("issue-id", type=int)
 @click.option("--title", default="")
 @click.option("--description", default="")
 @click.option("--done", "done", default="", type=click.Choice(["true", "false", ""]))
@@ -65,63 +65,63 @@ def create_task(obj: dict, project_id: int, title: str, description: str, due_da
 @click.option("--priority", default="")
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
-def update_task(obj: dict, task_id: int, title: str, description: str, done: str, due_date: str, priority: str, as_json: bool) -> None:
-    """Update a task. Only supplied options are changed."""
+def update_issue(obj: dict, issue_id: int, title: str, description: str, done: str, due_date: str, priority: str, as_json: bool) -> None:
+    """Update an issue. Only supplied options are changed."""
     try:
-        data = client.call_tool(obj["server"], "update_task", {"task_id": task_id, "title": title, "description": description, "done": done, "due_date": due_date, "priority": priority})
+        data = client.call_tool(obj["server"], "update_issue", {"issue_id": issue_id, "title": title, "description": description, "done": done, "due_date": due_date, "priority": priority})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
-    click.echo(json_mod.dumps(data, indent=2) if as_json else f"Updated: #{task_id}")
+    click.echo(json_mod.dumps(data, indent=2) if as_json else f"Updated: #{issue_id}")
 
 
 @tasks_group.command("delete")
-@click.argument("task-id", type=int)
+@click.argument("issue-id", type=int)
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
-def delete_task(obj: dict, task_id: int, as_json: bool) -> None:
-    """Delete a task by ID."""
+def delete_issue(obj: dict, issue_id: int, as_json: bool) -> None:
+    """Delete an issue by ID."""
     try:
-        data = client.call_tool(obj["server"], "delete_task", {"task_id": task_id})
+        data = client.call_tool(obj["server"], "delete_issue", {"issue_id": issue_id})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
-    click.echo(json_mod.dumps(data, indent=2) if as_json else f"Deleted: #{task_id}")
+    click.echo(json_mod.dumps(data, indent=2) if as_json else f"Deleted: #{issue_id}")
 
 
 @tasks_group.command("comments")
-@click.argument("task-id", type=int)
+@click.argument("issue-id", type=int)
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
-def list_comments(obj: dict, task_id: int, as_json: bool) -> None:
-    """List comments on a task."""
+def list_comments(obj: dict, issue_id: int, as_json: bool) -> None:
+    """List comments on an issue."""
     try:
-        data = client.call_tool(obj["server"], "list_task_comments", {"task_id": task_id})
+        data = client.call_tool(obj["server"], "list_issue_comments", {"issue_id": issue_id})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
     click.echo(json_mod.dumps(data, indent=2) if as_json else fmt.comments(data))
 
 
 @tasks_group.command("comment")
-@click.argument("task-id", type=int)
+@click.argument("issue-id", type=int)
 @click.argument("comment")
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
-def add_comment(obj: dict, task_id: int, comment: str, as_json: bool) -> None:
-    """Add a comment to a task."""
+def add_comment(obj: dict, issue_id: int, comment: str, as_json: bool) -> None:
+    """Add a comment to an issue."""
     try:
-        data = client.call_tool(obj["server"], "add_task_comment", {"task_id": task_id, "comment": comment})
+        data = client.call_tool(obj["server"], "add_issue_comment", {"issue_id": issue_id, "comment": comment})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
     click.echo(json_mod.dumps(data, indent=2) if as_json else f"Comment added: #{data.get('id')}")
 
 
 @tasks_group.command("relations")
-@click.argument("task-id", type=int)
+@click.argument("issue-id", type=int)
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
-def list_relations(obj: dict, task_id: int, as_json: bool) -> None:
-    """List relations for a task."""
+def list_relations(obj: dict, issue_id: int, as_json: bool) -> None:
+    """List relations for an issue."""
     try:
-        data = client.call_tool(obj["server"], "list_task_relations", {"task_id": task_id})
+        data = client.call_tool(obj["server"], "list_issue_relations", {"issue_id": issue_id})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
     if as_json:
@@ -129,65 +129,65 @@ def list_relations(obj: dict, task_id: int, as_json: bool) -> None:
     elif not data:
         click.echo("No relations.")
     else:
-        lines = [f"  {kind}: #{t.get('id')} {t.get('title', '')}" for kind, tasks in data.items() for t in tasks]
+        lines = [f"  {kind}: #{t.get('id')} {t.get('title', '')}" for kind, issues in data.items() for t in issues]
         click.echo("\n".join(lines))
 
 
 @tasks_group.command("add-relation")
-@click.argument("task-id", type=int)
-@click.argument("other-task-id", type=int)
+@click.argument("issue-id", type=int)
+@click.argument("other-issue-id", type=int)
 @click.argument("kind")
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
-def add_relation(obj: dict, task_id: int, other_task_id: int, kind: str, as_json: bool) -> None:
-    """Add a relation between two tasks. KIND: subtask, parenttask, related, blocking, blocked, precedes, follows."""
+def add_relation(obj: dict, issue_id: int, other_issue_id: int, kind: str, as_json: bool) -> None:
+    """Add a relation between two issues. KIND: subtask, parenttask, related, blocking, blocked, precedes, follows."""
     try:
-        data = client.call_tool(obj["server"], "add_task_relation", {"task_id": task_id, "other_task_id": other_task_id, "relation_kind": kind})
+        data = client.call_tool(obj["server"], "add_issue_relation", {"issue_id": issue_id, "other_issue_id": other_issue_id, "relation_kind": kind})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
-    click.echo(json_mod.dumps(data, indent=2) if as_json else f"Relation added: #{task_id} {kind} #{other_task_id}")
+    click.echo(json_mod.dumps(data, indent=2) if as_json else f"Relation added: #{issue_id} {kind} #{other_issue_id}")
 
 
 @tasks_group.command("remove-relation")
-@click.argument("task-id", type=int)
+@click.argument("issue-id", type=int)
 @click.argument("kind")
-@click.argument("other-task-id", type=int)
+@click.argument("other-issue-id", type=int)
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
-def remove_relation(obj: dict, task_id: int, kind: str, other_task_id: int, as_json: bool) -> None:
-    """Remove a relation between two tasks."""
+def remove_relation(obj: dict, issue_id: int, kind: str, other_issue_id: int, as_json: bool) -> None:
+    """Remove a relation between two issues."""
     try:
-        data = client.call_tool(obj["server"], "delete_task_relation", {"task_id": task_id, "relation_kind": kind, "other_task_id": other_task_id})
+        data = client.call_tool(obj["server"], "delete_issue_relation", {"issue_id": issue_id, "relation_kind": kind, "other_issue_id": other_issue_id})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
-    click.echo(json_mod.dumps(data, indent=2) if as_json else f"Relation removed: #{task_id} {kind} #{other_task_id}")
+    click.echo(json_mod.dumps(data, indent=2) if as_json else f"Relation removed: #{issue_id} {kind} #{other_issue_id}")
 
 
 @tasks_group.command("reminders")
-@click.argument("task-id", type=int)
+@click.argument("issue-id", type=int)
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
-def list_reminders(obj: dict, task_id: int, as_json: bool) -> None:
-    """List reminders for a task."""
+def list_reminders(obj: dict, issue_id: int, as_json: bool) -> None:
+    """List reminders for an issue."""
     try:
-        data = client.call_tool(obj["server"], "list_task_reminders", {"task_id": task_id})
+        data = client.call_tool(obj["server"], "list_issue_reminders", {"issue_id": issue_id})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
     click.echo(json_mod.dumps(data, indent=2) if as_json else ("\n".join(r.get("reminder", "") for r in data) if data else "No reminders."))
 
 
 @tasks_group.command("set-reminders")
-@click.argument("task-id", type=int)
+@click.argument("issue-id", type=int)
 @click.argument("reminders-json")
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
-def set_reminders(obj: dict, task_id: int, reminders_json: str, as_json: bool) -> None:
-    """Replace all reminders on a task. REMINDERS-JSON: '[{"reminder":"2026-06-10T09:00:00Z"}]' or '[]' to clear."""
+def set_reminders(obj: dict, issue_id: int, reminders_json: str, as_json: bool) -> None:
+    """Replace all reminders on an issue. REMINDERS-JSON: '[{"reminder":"2026-06-10T09:00:00Z"}]' or '[]' to clear."""
     try:
-        data = client.call_tool(obj["server"], "set_task_reminders", {"task_id": task_id, "reminders_json": reminders_json})
+        data = client.call_tool(obj["server"], "set_issue_reminders", {"issue_id": issue_id, "reminders_json": reminders_json})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
-    click.echo(json_mod.dumps(data, indent=2) if as_json else f"Reminders updated: #{task_id}")
+    click.echo(json_mod.dumps(data, indent=2) if as_json else f"Reminders updated: #{issue_id}")
 
 
 @tasks_group.command("labels")
@@ -203,31 +203,31 @@ def list_labels(obj: dict, as_json: bool) -> None:
 
 
 @tasks_group.command("add-label")
-@click.argument("task-id", type=int)
+@click.argument("issue-id", type=int)
 @click.argument("label-id", type=int)
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
-def add_label(obj: dict, task_id: int, label_id: int, as_json: bool) -> None:
-    """Attach a label to a task."""
+def add_label(obj: dict, issue_id: int, label_id: int, as_json: bool) -> None:
+    """Attach a label to an issue."""
     try:
-        data = client.call_tool(obj["server"], "add_task_label", {"task_id": task_id, "label_id": label_id})
+        data = client.call_tool(obj["server"], "add_issue_label", {"issue_id": issue_id, "label_id": label_id})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
-    click.echo(json_mod.dumps(data, indent=2) if as_json else f"Label #{label_id} added to task #{task_id}")
+    click.echo(json_mod.dumps(data, indent=2) if as_json else f"Label #{label_id} added to issue #{issue_id}")
 
 
 @tasks_group.command("remove-label")
-@click.argument("task-id", type=int)
+@click.argument("issue-id", type=int)
 @click.argument("label-id", type=int)
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
-def remove_label(obj: dict, task_id: int, label_id: int, as_json: bool) -> None:
-    """Remove a label from a task."""
+def remove_label(obj: dict, issue_id: int, label_id: int, as_json: bool) -> None:
+    """Remove a label from an issue."""
     try:
-        data = client.call_tool(obj["server"], "remove_task_label", {"task_id": task_id, "label_id": label_id})
+        data = client.call_tool(obj["server"], "remove_issue_label", {"issue_id": issue_id, "label_id": label_id})
     except client.GatewayError as e:
         raise click.ClickException(str(e))
-    click.echo(json_mod.dumps(data, indent=2) if as_json else f"Label #{label_id} removed from task #{task_id}")
+    click.echo(json_mod.dumps(data, indent=2) if as_json else f"Label #{label_id} removed from issue #{issue_id}")
 
 
 # --- Projects ---
