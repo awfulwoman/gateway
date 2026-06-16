@@ -1,5 +1,4 @@
 from __future__ import annotations
-import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -66,6 +65,8 @@ def _normalize_dates(fm: dict) -> dict:
                 i.isoformat() if isinstance(i, (dt.date, dt.datetime)) else i
                 for i in v
             ]
+        elif isinstance(v, dict):
+            result[k] = _normalize_dates(v)
         else:
             result[k] = v
     return result
