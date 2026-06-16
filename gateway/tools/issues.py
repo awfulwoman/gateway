@@ -255,5 +255,55 @@ def create_issue(
     })
 
 
+def update_issue(
+    issue_id: int,
+    title: str = "",
+    status: str = "",
+    project: str = "",
+    description: str = "",
+    due: str = "",
+    priority: int = -1,
+    labels: list[str] | None = None,
+    reminders: list[str] | None = None,
+    related: list[int] | None = None,
+) -> str:
+    """Update an issue. Only non-empty/non-default arguments are applied. priority=-1 means unchanged."""
+    try:
+        f, fm, existing_description, checklist, comments = _read_issue(issue_id)
+    except FileNotFoundError as e:
+        return json.dumps({"error": str(e)})
+
+    if title:
+        fm["title"] = title
+    if status:
+        fm["status"] = status
+    if project:
+        fm["project"] = project
+    if due:
+        fm["due"] = due
+    if priority >= 0:
+        fm["priority"] = priority
+    if labels is not None:
+        fm["labels"] = labels
+    if reminders is not None:
+        fm["reminders"] = reminders
+    if related is not None:
+        fm["related"] = related
+
+    new_description = description if description else existing_description
+    content = _render_file(fm, new_description, checklist, comments)
+    f.write_text(content, encoding="utf-8")
+    return json.dumps({"status": "updated", "id": issue_id})
+
+
+def delete_issue(issue_id: int) -> str:
+    """Delete an issue by numeric ID."""
+    f = _find_file(issue_id)
+    if f is None:
+        return json.dumps({"error": f"Issue #{issue_id} not found"})
+    f.unlink()
+    return json.dumps({"status": "deleted", "id": issue_id})
+
+
 def register(mcp) -> None:
     pass  # populated in Task 6

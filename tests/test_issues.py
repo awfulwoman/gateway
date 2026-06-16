@@ -229,3 +229,32 @@ def test_create_status_defaults_to_open(vault):
     issues.create_issue("Issue")
     result = json.loads(issues.get_issue(1))
     assert result["status"] == "open"
+
+
+def test_update_title(vault):
+    issues.create_issue("Original")
+    issues.update_issue(1, title="Updated")
+    assert json.loads(issues.get_issue(1))["title"] == "Updated"
+
+
+def test_update_status(vault):
+    issues.create_issue("Issue")
+    issues.update_issue(1, status="in-progress")
+    assert json.loads(issues.get_issue(1))["status"] == "in-progress"
+
+
+def test_update_not_found(vault):
+    result = json.loads(issues.update_issue(99, title="x"))
+    assert "error" in result
+
+
+def test_delete_issue(vault):
+    issues.create_issue("To delete")
+    issues.delete_issue(1)
+    result = json.loads(issues.get_issue(1))
+    assert "error" in result
+
+
+def test_delete_not_found(vault):
+    result = json.loads(issues.delete_issue(99))
+    assert "error" in result
