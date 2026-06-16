@@ -136,7 +136,7 @@ gw issues toggle 42 "item text"    — flip done/undone on a checklist item
 
 ## Obsidian Templates
 
-### `_templates/issue.md`
+### `_templates/Issue.md`
 
 Scaffolds a new issue note manually within Obsidian:
 
@@ -162,6 +162,6 @@ related: []
 ## Comments
 ```
 
-### `_templates/bases/issues.md`
+### `_templates/Bases/Issues.md`
 
 A Bases view over `Projects/_issues/` displaying all issues as a table. Default columns: id, title, project, status, priority, due, labels. Filterable and sortable by any frontmatter field.
