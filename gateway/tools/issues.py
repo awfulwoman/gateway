@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 import yaml
@@ -32,7 +32,7 @@ def _slugify(title: str) -> str:
     s = re.sub(r"[^\w\s-]", "", s)
     s = re.sub(r"[\s_]+", "-", s)
     s = re.sub(r"-+", "-", s).strip("-")
-    return s[:60]
+    return (s[:60]) or "issue"
 
 
 def _next_id() -> int:
@@ -54,16 +54,15 @@ def _find_file(issue_id: int) -> Path | None:
 
 def _normalize_dates(fm: dict) -> dict:
     """Convert yaml-parsed date/datetime objects back to ISO strings."""
-    import datetime as dt
     result: dict[str, Any] = {}
     for k, v in fm.items():
-        if isinstance(v, dt.datetime):
+        if isinstance(v, datetime):
             result[k] = v.isoformat()
-        elif isinstance(v, dt.date):
+        elif isinstance(v, date):
             result[k] = v.isoformat()
         elif isinstance(v, list):
             result[k] = [
-                i.isoformat() if isinstance(i, (dt.date, dt.datetime)) else i
+                i.isoformat() if isinstance(i, (date, datetime)) else i
                 for i in v
             ]
         elif isinstance(v, dict):
@@ -272,6 +271,9 @@ def update_issue(
         f, fm, existing_description, checklist, comments = _read_issue(issue_id)
     except FileNotFoundError as e:
         return json.dumps({"error": str(e)})
+
+    if status and status not in {"open", "in-progress", "done"}:
+        return json.dumps({"error": f"Invalid status: {status!r}. Must be one of: open, in-progress, done"})
 
     if title:
         fm["title"] = title

@@ -54,6 +54,10 @@ def test_slugify_long_title():
     assert len(issues._slugify("a" * 100)) <= 60
 
 
+def test_slugify_empty_result():
+    assert issues._slugify("!!!!") == "issue"
+
+
 def test_next_id_empty(vault):
     assert issues._next_id() == 1
 
@@ -245,6 +249,12 @@ def test_update_status(vault):
 
 def test_update_not_found(vault):
     result = json.loads(issues.update_issue(99, title="x"))
+    assert "error" in result
+
+
+def test_update_invalid_status(vault):
+    issues.create_issue("Issue")
+    result = json.loads(issues.update_issue(1, status="closed"))
     assert "error" in result
 
 
