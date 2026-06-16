@@ -93,3 +93,30 @@ def test_issues_delete():
     mock.assert_called_once_with(
         "http://127.0.0.1:4000/mcp", "delete_issue", {"issue_id": 42},
     )
+
+
+def test_issues_comment():
+    with patch("gateway.cli.client.call_tool", return_value={"status": "added", "id": 42, "timestamp": "2026-06-16T10:00"}) as mock:
+        r = runner.invoke(main, ["issues", "comment", "42", "LGTM"])
+    assert r.exit_code == 0
+    mock.assert_called_once_with(
+        "http://127.0.0.1:4000/mcp", "add_issue_comment", {"issue_id": 42, "comment": "LGTM"},
+    )
+
+
+def test_issues_check():
+    with patch("gateway.cli.client.call_tool", return_value={"status": "added", "id": 42, "item": "Write docs"}) as mock:
+        r = runner.invoke(main, ["issues", "check", "42", "Write docs"])
+    assert r.exit_code == 0
+    mock.assert_called_once_with(
+        "http://127.0.0.1:4000/mcp", "add_checklist_item", {"issue_id": 42, "item": "Write docs"},
+    )
+
+
+def test_issues_toggle():
+    with patch("gateway.cli.client.call_tool", return_value={"status": "toggled", "id": 42, "item": "Write docs", "done": True}) as mock:
+        r = runner.invoke(main, ["issues", "toggle", "42", "Write docs"])
+    assert r.exit_code == 0
+    mock.assert_called_once_with(
+        "http://127.0.0.1:4000/mcp", "toggle_checklist_item", {"issue_id": 42, "item_text": "Write docs"},
+    )
