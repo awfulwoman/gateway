@@ -1,6 +1,6 @@
 from __future__ import annotations
 import click
-from gateway.cli.commands import calendar, reminders, contacts, email, obsidian, karakeep, owntracks, vikunja
+from gateway.cli.commands import calendar, reminders, contacts, email, obsidian, karakeep, owntracks, issues
 
 
 @click.group()
@@ -25,5 +25,4 @@ main.add_command(email.group, "email")
 main.add_command(obsidian.group, "notes")
 main.add_command(karakeep.group, "bookmarks")
 main.add_command(owntracks.group, "location")
-main.add_command(vikunja.tasks_group, "issues")
-main.add_command(vikunja.projects_group, "projects")
+main.add_command(issues.group, "issues")
