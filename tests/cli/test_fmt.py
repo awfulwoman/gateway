@@ -136,30 +136,20 @@ def test_issues_empty():
 
 
 def test_issues():
-    data = [{"id": 42, "title": "Write tests", "done": False, "due_date": "2026-06-10T00:00:00Z", "priority": 2, "project_id": 1, "description": "", "labels": [], "reminders": [], "related_tasks": {}}]
+    data = [{"id": 42, "title": "Write tests", "status": "open",
+              "due": "2026-07-01", "priority": 2, "project": "Gateway", "labels": ["dev"]}]
     out = fmt.issues(data)
     assert "#42" in out
     assert "Write tests" in out
-    assert "2026-06-10" in out
+    assert "2026-07-01" in out
+    assert "[Gateway]" in out
 
 
 def test_issues_done():
-    data = [{"id": 1, "title": "Done thing", "done": True, "due_date": None, "priority": 0, "project_id": 1, "description": "", "labels": [], "reminders": [], "related_tasks": {}}]
+    data = [{"id": 1, "title": "Done thing", "status": "done",
+              "due": "", "priority": 0, "project": "", "labels": []}]
     out = fmt.issues(data)
     assert "[x]" in out
-
-
-# --- projects ---
-
-def test_projects_empty():
-    assert fmt.projects([]) == "No projects."
-
-
-def test_projects():
-    data = [{"id": 1, "title": "Inbox", "description": "", "is_archived": False, "parent_project_id": None}]
-    out = fmt.projects(data)
-    assert "#1" in out
-    assert "Inbox" in out
 
 
 # --- location ---
@@ -257,25 +247,21 @@ def test_lists():
 # --- issue_detail ---
 
 def test_issue_detail():
-    t = {"id": 42, "title": "Write tests", "done": False, "due_date": "2026-06-10T00:00:00Z", "priority": 2, "project_id": 1, "description": "Needs TDD", "labels": [{"id": 1, "title": "urgent"}], "reminders": [], "related_tasks": {}}
+    t = {
+        "id": 42, "title": "Write tests", "status": "open",
+        "due": "2026-07-01", "priority": 2, "project": "Gateway",
+        "description": "Needs TDD", "labels": ["urgent"], "related": [17],
+        "reminders": [], "checklist": [{"text": "Draft tests", "done": False}],
+        "comments": [{"timestamp": "2026-06-16T10:00", "text": "Started"}],
+    }
     out = fmt.issue_detail(t)
     assert "#42" in out
     assert "Write tests" in out
     assert "Needs TDD" in out
     assert "urgent" in out
-
-
-# --- comments ---
-
-def test_comments_empty():
-    assert fmt.comments([]) == "No comments."
-
-
-def test_comments():
-    data = [{"id": 1, "comment": "Looks good", "created": "2026-06-07T10:00:00Z", "author": "charlie"}]
-    out = fmt.comments(data)
-    assert "Looks good" in out
-    assert "charlie" in out
+    assert "Draft tests" in out
+    assert "Started" in out
+    assert "#17" in out
 
 
 # --- location_history populated ---

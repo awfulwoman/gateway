@@ -152,35 +152,37 @@ def issues(data: list) -> str:
         return "No issues."
     lines = []
     for t in data:
-        done = "x" if t.get("done") else " "
-        due = f"  due:{t['due_date'][:10]}" if t.get("due_date") else ""
+        mark = "x" if t.get("status") == "done" else " "
+        due = f"  due:{t['due'][:10]}" if t.get("due") else ""
         pri = f"  p{t['priority']}" if t.get("priority") else ""
-        lines.append(f"[{done}] #{t['id']}  {t['title']}{due}{pri}")
+        proj = f"  [{t['project']}]" if t.get("project") else ""
+        lines.append(f"[{mark}] #{t['id']}  {t['title']}{proj}{due}{pri}")
     return "\n".join(lines)
 
 
 def issue_detail(t: dict) -> str:
     lines = [
         f"#{t['id']} {t['title']}",
-        f"  Done:     {'yes' if t.get('done') else 'no'}",
+        f"  Status:   {t.get('status', 'open')}",
         f"  Priority: {t.get('priority', 0)}",
-        f"  Due:      {t.get('due_date') or '-'}",
-        f"  Project:  {t.get('project_id') or '-'}",
+        f"  Due:      {t.get('due') or '-'}",
+        f"  Project:  {t.get('project') or '-'}",
     ]
     if t.get("description"):
         lines += ["", t["description"]]
     if t.get("labels"):
-        lines.append(f"  Labels:   {', '.join(l['title'] for l in t['labels'])}")
-    return "\n".join(lines)
-
-
-def projects(data: list) -> str:
-    if not data:
-        return "No projects."
-    lines = []
-    for p in data:
-        archived = " [archived]" if p.get("is_archived") else ""
-        lines.append(f"#{p['id']}  {p['title']}{archived}")
+        lines.append(f"  Labels:   {', '.join(t['labels'])}")
+    if t.get("related"):
+        lines.append(f"  Related:  {', '.join('#' + str(i) for i in t['related'])}")
+    if t.get("checklist"):
+        lines.append("\nChecklist:")
+        for item in t["checklist"]:
+            mark = "x" if item.get("done") else " "
+            lines.append(f"  [{mark}] {item['text']}")
+    if t.get("comments"):
+        lines.append("\nComments:")
+        for c in t["comments"]:
+            lines.append(f"  {c['timestamp']}: {c['text']}")
     return "\n".join(lines)
 
 
