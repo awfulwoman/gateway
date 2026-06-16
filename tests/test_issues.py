@@ -258,3 +258,66 @@ def test_delete_issue(vault):
 def test_delete_not_found(vault):
     result = json.loads(issues.delete_issue(99))
     assert "error" in result
+
+
+def test_add_comment(vault):
+    issues.create_issue("Issue")
+    issues.add_issue_comment(1, "First comment")
+    result = json.loads(issues.get_issue(1))
+    assert len(result["comments"]) == 1
+    assert result["comments"][0]["text"] == "First comment"
+
+
+def test_add_comment_appends(vault):
+    issues.create_issue("Issue")
+    issues.add_issue_comment(1, "Comment A")
+    issues.add_issue_comment(1, "Comment B")
+    result = json.loads(issues.get_issue(1))
+    assert len(result["comments"]) == 2
+    assert result["comments"][1]["text"] == "Comment B"
+
+
+def test_add_checklist_item(vault):
+    issues.create_issue("Issue")
+    issues.add_checklist_item(1, "New task")
+    result = json.loads(issues.get_issue(1))
+    assert any(c["text"] == "New task" for c in result["checklist"])
+    assert result["checklist"][-1]["done"] is False
+
+
+def test_toggle_checklist_item_to_done(vault):
+    issues.create_issue("Issue", checklist_items=["Do thing"])
+    issues.toggle_checklist_item(1, "Do thing")
+    result = json.loads(issues.get_issue(1))
+    assert result["checklist"][0]["done"] is True
+
+
+def test_toggle_checklist_item_back_to_undone(vault):
+    issues.create_issue("Issue", checklist_items=["Do thing"])
+    issues.toggle_checklist_item(1, "Do thing")
+    issues.toggle_checklist_item(1, "Do thing")
+    result = json.loads(issues.get_issue(1))
+    assert result["checklist"][0]["done"] is False
+
+
+def test_toggle_checklist_item_not_found(vault):
+    issues.create_issue("Issue")
+    result = json.loads(issues.toggle_checklist_item(1, "Nonexistent"))
+    assert "error" in result
+
+
+def test_update_preserves_checklist_and_comments(vault):
+    issues.create_issue("Issue", checklist_items=["Step 1"])
+    issues.add_issue_comment(1, "A comment")
+    issues.update_issue(1, status="done")
+    result = json.loads(issues.get_issue(1))
+    assert len(result["checklist"]) == 1
+    assert len(result["comments"]) == 1
+
+
+def test_issues_registered_in_server():
+    from gateway.config import Config
+    from gateway import main as gw_main
+    config = Config()
+    mcp = gw_main.create_server(config)
+    assert mcp is not None

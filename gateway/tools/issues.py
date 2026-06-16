@@ -305,5 +305,52 @@ def delete_issue(issue_id: int) -> str:
     return json.dumps({"status": "deleted", "id": issue_id})
 
 
+def add_issue_comment(issue_id: int, comment: str) -> str:
+    """Append a timestamped comment to an issue."""
+    try:
+        f, fm, description, checklist, comments = _read_issue(issue_id)
+    except FileNotFoundError as e:
+        return json.dumps({"error": str(e)})
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M")
+    comments.append({"timestamp": timestamp, "text": comment})
+    f.write_text(_render_file(fm, description, checklist, comments), encoding="utf-8")
+    return json.dumps({"status": "added", "id": issue_id, "timestamp": timestamp})
+
+
+def add_checklist_item(issue_id: int, item: str) -> str:
+    """Append a new unchecked checklist item to an issue."""
+    try:
+        f, fm, description, checklist, comments = _read_issue(issue_id)
+    except FileNotFoundError as e:
+        return json.dumps({"error": str(e)})
+    checklist.append({"text": item, "done": False})
+    f.write_text(_render_file(fm, description, checklist, comments), encoding="utf-8")
+    return json.dumps({"status": "added", "id": issue_id, "item": item})
+
+
+def toggle_checklist_item(issue_id: int, item_text: str) -> str:
+    """Flip done/undone for the checklist item whose text matches item_text exactly."""
+    try:
+        f, fm, description, checklist, comments = _read_issue(issue_id)
+    except FileNotFoundError as e:
+        return json.dumps({"error": str(e)})
+    for item in checklist:
+        if item["text"] == item_text:
+            item["done"] = not item["done"]
+            f.write_text(_render_file(fm, description, checklist, comments), encoding="utf-8")
+            return json.dumps({"status": "toggled", "id": issue_id, "item": item_text, "done": item["done"]})
+    return json.dumps({"error": f"Checklist item not found: {item_text}"})
+
+
 def register(mcp) -> None:
-    pass  # populated in Task 6
+    for fn in [
+        list_issues,
+        get_issue,
+        create_issue,
+        update_issue,
+        delete_issue,
+        add_issue_comment,
+        add_checklist_item,
+        toggle_checklist_item,
+    ]:
+        mcp.tool()(fn)
