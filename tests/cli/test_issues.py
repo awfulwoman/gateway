@@ -56,3 +56,40 @@ def test_issues_get():
     mock.assert_called_once_with(
         "http://127.0.0.1:4000/mcp", "get_issue", {"issue_id": 42},
     )
+
+
+def test_issues_create():
+    with patch("gateway.cli.client.call_tool", return_value={"id": 43, "title": "New issue", "path": "Projects/_issues/0043-new-issue.md"}) as mock:
+        r = runner.invoke(main, ["issues", "create", "New issue", "--project", "Gateway"])
+    assert r.exit_code == 0
+    assert "43" in r.output
+    mock.assert_called_once_with(
+        "http://127.0.0.1:4000/mcp", "create_issue",
+        {"title": "New issue", "project": "Gateway", "description": "", "due": "", "priority": 0, "labels": []},
+    )
+
+
+def test_issues_create_with_label():
+    with patch("gateway.cli.client.call_tool", return_value={"id": 44, "title": "Bug", "path": "Projects/_issues/0044-bug.md"}) as mock:
+        runner.invoke(main, ["issues", "create", "Bug", "--label", "bug", "--label", "urgent"])
+    args = mock.call_args[0]
+    assert args[2]["labels"] == ["bug", "urgent"]
+
+
+def test_issues_update():
+    with patch("gateway.cli.client.call_tool", return_value={"status": "updated", "id": 42}) as mock:
+        r = runner.invoke(main, ["issues", "update", "42", "--status", "done"])
+    assert r.exit_code == 0
+    mock.assert_called_once_with(
+        "http://127.0.0.1:4000/mcp", "update_issue",
+        {"issue_id": 42, "title": "", "status": "done", "project": "", "description": "", "due": "", "priority": -1},
+    )
+
+
+def test_issues_delete():
+    with patch("gateway.cli.client.call_tool", return_value={"status": "deleted", "id": 42}) as mock:
+        r = runner.invoke(main, ["issues", "delete", "42"])
+    assert r.exit_code == 0
+    mock.assert_called_once_with(
+        "http://127.0.0.1:4000/mcp", "delete_issue", {"issue_id": 42},
+    )
