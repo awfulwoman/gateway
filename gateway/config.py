@@ -26,11 +26,6 @@ class OwnTracksConfig(BaseModel):
     owntracks_device: str = ""
 
 
-class VikunjaConfig(BaseModel):
-    base_url: str = ""
-    api_token: str = ""
-
-
 class ServerConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 4000
@@ -48,5 +43,4 @@ class Config(BaseSettings):
     obsidian: ObsidianConfig = ObsidianConfig()
     karakeep: KarakeepConfig = KarakeepConfig()
     owntracks: OwnTracksConfig = OwnTracksConfig()
-    vikunja: VikunjaConfig = VikunjaConfig()
     server: ServerConfig = ServerConfig()

@@ -2,7 +2,7 @@ from __future__ import annotations
 import argparse
 from mcp.server.fastmcp import FastMCP
 from gateway.config import Config
-from gateway.tools import calendar, reminders, contacts, email, obsidian, karakeep, owntracks, vikunja
+from gateway.tools import calendar, reminders, contacts, email, obsidian, karakeep, owntracks, issues
 
 
 def create_server(config: Config) -> FastMCP:
@@ -24,8 +24,8 @@ def create_server(config: Config) -> FastMCP:
     owntracks.init(config.owntracks)
     owntracks.register(mcp)
 
-    vikunja.init(config.vikunja)
-    vikunja.register(mcp)
+    issues.init(config.obsidian)
+    issues.register(mcp)
 
     return mcp
 
