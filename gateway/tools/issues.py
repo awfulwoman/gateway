@@ -211,5 +211,49 @@ def get_issue(issue_id: int) -> str:
     })
 
 
+def create_issue(
+    title: str,
+    project: str = "",
+    description: str = "",
+    due: str = "",
+    priority: int = 0,
+    labels: list[str] | None = None,
+    reminders: list[str] | None = None,
+    related: list[int] | None = None,
+    checklist_items: list[str] | None = None,
+) -> str:
+    """Create a new issue in Projects/_issues/. Returns the new issue id, title, and vault-relative path."""
+    issue_id = _next_id()
+    slug = _slugify(title)
+    filename = f"{issue_id:04d}-{slug}.md" if slug else f"{issue_id:04d}.md"
+
+    fm: dict[str, Any] = {
+        "id": issue_id,
+        "title": title,
+        "project": project,
+        "status": "open",
+        "priority": priority,
+    }
+    if due:
+        fm["due"] = due
+    if labels:
+        fm["labels"] = labels
+    if reminders:
+        fm["reminders"] = reminders
+    if related:
+        fm["related"] = related
+
+    checklist = [{"text": item, "done": False} for item in (checklist_items or [])]
+    content = _render_file(fm, description, checklist, [])
+    path = _issues_dir() / filename
+    path.write_text(content, encoding="utf-8")
+
+    return json.dumps({
+        "id": issue_id,
+        "title": title,
+        "path": str(path.relative_to(_vault())),
+    })
+
+
 def register(mcp) -> None:
     pass  # populated in Task 6

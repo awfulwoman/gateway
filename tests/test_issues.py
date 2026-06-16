@@ -177,3 +177,55 @@ def test_get_issue_full_detail(vault):
         {"text": "Done step", "done": True},
     ]
     assert result["comments"][0]["text"] == "First comment."
+
+
+def test_create_assigns_id_1_when_empty(vault):
+    result = json.loads(issues.create_issue("First issue"))
+    assert result["id"] == 1
+
+
+def test_create_filename_format(vault):
+    issues.create_issue("Fix Login Bug")
+    files = list((vault / "Projects" / "_issues").glob("*.md"))
+    assert len(files) == 1
+    assert files[0].name == "0001-fix-login-bug.md"
+
+
+def test_create_sequential_ids(vault):
+    issues.create_issue("First")
+    issues.create_issue("Second")
+    issues.create_issue("Third")
+    r = json.loads(issues.get_issue(3))
+    assert r["id"] == 3
+    assert r["title"] == "Third"
+
+
+def test_create_stores_all_fields(vault):
+    issues.create_issue(
+        "My issue",
+        project="Gateway",
+        description="Details here",
+        due="2026-07-01",
+        priority=2,
+        labels=["bug", "urgent"],
+        reminders=["2026-06-30T09:00:00Z"],
+        related=[5],
+        checklist_items=["Step 1", "Step 2"],
+    )
+    result = json.loads(issues.get_issue(1))
+    assert result["project"] == "Gateway"
+    assert result["description"] == "Details here"
+    assert result["due"] == "2026-07-01"
+    assert result["priority"] == 2
+    assert result["labels"] == ["bug", "urgent"]
+    assert result["related"] == [5]
+    assert result["checklist"] == [
+        {"text": "Step 1", "done": False},
+        {"text": "Step 2", "done": False},
+    ]
+
+
+def test_create_status_defaults_to_open(vault):
+    issues.create_issue("Issue")
+    result = json.loads(issues.get_issue(1))
+    assert result["status"] == "open"
