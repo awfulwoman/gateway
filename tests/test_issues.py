@@ -118,3 +118,62 @@ def test_render_roundtrip():
     assert desc == "Description."
     assert checks == checklist
     assert cmts == comments
+
+
+def test_list_issues_empty(vault):
+    result = json.loads(issues.list_issues())
+    assert result == []
+
+
+def test_list_issues_returns_summary(vault):
+    (vault / "Projects" / "_issues").mkdir(parents=True)
+    (vault / "Projects" / "_issues" / "0001-test.md").write_text(
+        "---\nid: 1\ntitle: Test\nproject: Gateway\nstatus: open\npriority: 0\n---\n\n## Checklist\n\n## Comments\n"
+    )
+    result = json.loads(issues.list_issues())
+    assert len(result) == 1
+    assert result[0]["id"] == 1
+    assert result[0]["title"] == "Test"
+    assert result[0]["project"] == "Gateway"
+    assert "checklist" not in result[0]
+    assert "comments" not in result[0]
+
+
+def test_list_issues_filter_project(vault):
+    d = vault / "Projects" / "_issues"
+    d.mkdir(parents=True)
+    (d / "0001-alpha.md").write_text("---\nid: 1\ntitle: A\nproject: Alpha\nstatus: open\npriority: 0\n---\n\n## Checklist\n\n## Comments\n")
+    (d / "0002-beta.md").write_text("---\nid: 2\ntitle: B\nproject: Beta\nstatus: open\npriority: 0\n---\n\n## Checklist\n\n## Comments\n")
+    result = json.loads(issues.list_issues(project="Alpha"))
+    assert len(result) == 1
+    assert result[0]["title"] == "A"
+
+
+def test_list_issues_filter_status(vault):
+    d = vault / "Projects" / "_issues"
+    d.mkdir(parents=True)
+    (d / "0001-open.md").write_text("---\nid: 1\ntitle: Open\nproject: P\nstatus: open\npriority: 0\n---\n\n## Checklist\n\n## Comments\n")
+    (d / "0002-done.md").write_text("---\nid: 2\ntitle: Done\nproject: P\nstatus: done\npriority: 0\n---\n\n## Checklist\n\n## Comments\n")
+    result = json.loads(issues.list_issues(status="open"))
+    assert len(result) == 1
+    assert result[0]["id"] == 1
+
+
+def test_get_issue_not_found(vault):
+    result = json.loads(issues.get_issue(99))
+    assert "error" in result
+
+
+def test_get_issue_full_detail(vault):
+    d = vault / "Projects" / "_issues"
+    d.mkdir(parents=True)
+    (d / "0042-test.md").write_text(SAMPLE)
+    result = json.loads(issues.get_issue(42))
+    assert result["id"] == 42
+    assert result["title"] == "Fix login bug"
+    assert result["description"] == "Description prose here."
+    assert result["checklist"] == [
+        {"text": "First step", "done": False},
+        {"text": "Done step", "done": True},
+    ]
+    assert result["comments"][0]["text"] == "First comment."

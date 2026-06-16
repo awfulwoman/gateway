@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -153,6 +154,61 @@ def _read_issue(issue_id: int) -> tuple[Path, dict, str, list[dict], list[dict]]
     fm, body = _parse_frontmatter(content)
     description, checklist, comments = _parse_body(body)
     return f, fm, description, checklist, comments
+
+
+def list_issues(
+    project: str = "",
+    status: str = "",
+    priority: int = -1,
+    label: str = "",
+) -> str:
+    """List issues in Projects/_issues/. Filter by project name, status (open/in-progress/done), priority (0-5, -1=all), or label."""
+    results = []
+    for f in sorted(_issues_dir().glob("*.md")):
+        content = f.read_text(encoding="utf-8")
+        fm, _ = _parse_frontmatter(content)
+        if not fm.get("id"):
+            continue
+        if project and fm.get("project", "") != project:
+            continue
+        if status and fm.get("status", "") != status:
+            continue
+        if priority >= 0 and fm.get("priority", 0) != priority:
+            continue
+        if label and label not in (fm.get("labels") or []):
+            continue
+        results.append({
+            "id": fm.get("id"),
+            "title": fm.get("title", ""),
+            "project": fm.get("project", ""),
+            "status": fm.get("status", "open"),
+            "priority": fm.get("priority", 0),
+            "due": fm.get("due", ""),
+            "labels": fm.get("labels") or [],
+        })
+    return json.dumps(results)
+
+
+def get_issue(issue_id: int) -> str:
+    """Get a single issue by numeric ID. Returns full detail including checklist and comments."""
+    try:
+        _, fm, description, checklist, comments = _read_issue(issue_id)
+    except FileNotFoundError as e:
+        return json.dumps({"error": str(e)})
+    return json.dumps({
+        "id": fm.get("id"),
+        "title": fm.get("title", ""),
+        "project": fm.get("project", ""),
+        "status": fm.get("status", "open"),
+        "priority": fm.get("priority", 0),
+        "due": fm.get("due", ""),
+        "labels": fm.get("labels") or [],
+        "reminders": fm.get("reminders") or [],
+        "related": fm.get("related") or [],
+        "description": description,
+        "checklist": checklist,
+        "comments": comments,
+    })
 
 
 def register(mcp) -> None:
