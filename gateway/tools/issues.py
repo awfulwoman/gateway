@@ -8,7 +8,7 @@ import yaml
 from gateway.config import ObsidianConfig
 
 _config: ObsidianConfig | None = None
-_ISSUES_DIR = "Projects/_issues"
+_PROJECTS_DIR = "Projects"
 
 
 def init(config: ObsidianConfig) -> None:
@@ -21,10 +21,18 @@ def _vault() -> Path:
     return Path(_config.vault_path).expanduser()
 
 
-def _issues_dir() -> Path:
-    d = _vault() / _ISSUES_DIR
+def _issues_dir_for_project(project: str) -> Path:
+    d = _vault() / _PROJECTS_DIR / project / "_issues"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def _all_issues_dirs() -> list[Path]:
+    """Return all existing _issues dirs under Projects/{topic}/{project}/."""
+    projects_root = _vault() / _PROJECTS_DIR
+    if not projects_root.exists():
+        return []
+    return [d for d in projects_root.glob("*/*/_issues") if d.is_dir()]
 
 
 def _slugify(title: str) -> str:
@@ -38,7 +46,8 @@ def _slugify(title: str) -> str:
 def _next_id() -> int:
     ids = [
         int(m.group(1))
-        for f in _issues_dir().glob("*.md")
+        for d in _all_issues_dirs()
+        for f in d.glob("*.md")
         if (m := re.match(r"^(\d+)-", f.name))
     ]
     return max(ids, default=0) + 1
@@ -46,9 +55,10 @@ def _next_id() -> int:
 
 def _find_file(issue_id: int) -> Path | None:
     prefix = f"{issue_id:04d}-"
-    for f in _issues_dir().glob("*.md"):
-        if f.name.startswith(prefix):
-            return f
+    for d in _all_issues_dirs():
+        for f in d.glob("*.md"):
+            if f.name.startswith(prefix):
+                return f
     return None
 
 
@@ -161,30 +171,32 @@ def list_issues(
     priority: int = -1,
     label: str = "",
 ) -> str:
-    """List issues in Projects/_issues/. Filter by project name, status (open/in-progress/done), priority (0-5, -1=all), or label."""
+    """List issues across all projects. Filter by project path (e.g. 'Software/Podderton'), status (open/in-progress/done), priority (0-5, -1=all), or label."""
     results = []
-    for f in sorted(_issues_dir().glob("*.md")):
-        content = f.read_text(encoding="utf-8")
-        fm, _ = _parse_frontmatter(content)
-        if not fm.get("id"):
-            continue
-        if project and fm.get("project", "") != project:
-            continue
-        if status and fm.get("status", "") != status:
-            continue
-        if priority >= 0 and fm.get("priority", 0) != priority:
-            continue
-        if label and label not in (fm.get("labels") or []):
-            continue
-        results.append({
-            "id": fm.get("id"),
-            "title": fm.get("title", ""),
-            "project": fm.get("project", ""),
-            "status": fm.get("status", "open"),
-            "priority": fm.get("priority", 0),
-            "due": fm.get("due", ""),
-            "labels": fm.get("labels") or [],
-        })
+    for d in _all_issues_dirs():
+        for f in sorted(d.glob("*.md")):
+            content = f.read_text(encoding="utf-8")
+            fm, _ = _parse_frontmatter(content)
+            if not fm.get("id"):
+                continue
+            if project and fm.get("project", "") != project:
+                continue
+            if status and fm.get("status", "") != status:
+                continue
+            if priority >= 0 and fm.get("priority", 0) != priority:
+                continue
+            if label and label not in (fm.get("labels") or []):
+                continue
+            results.append({
+                "id": fm.get("id"),
+                "title": fm.get("title", ""),
+                "project": fm.get("project", ""),
+                "status": fm.get("status", "open"),
+                "priority": fm.get("priority", 0),
+                "due": fm.get("due", ""),
+                "labels": fm.get("labels") or [],
+            })
+    results.sort(key=lambda x: x["id"])
     return json.dumps(results)
 
 
@@ -221,7 +233,10 @@ def create_issue(
     related: list[int] | None = None,
     checklist_items: list[str] | None = None,
 ) -> str:
-    """Create a new issue in Projects/_issues/. Returns the new issue id, title, and vault-relative path."""
+    """Create a new issue in Projects/{project}/_issues/. project must be a vault-relative path e.g. 'Software/Podderton'. Returns the new issue id, title, and vault-relative path."""
+    if not project:
+        return json.dumps({"error": "project is required (e.g. 'Software/Podderton')"})
+
     issue_id = _next_id()
     slug = _slugify(title)
     filename = f"{issue_id:04d}-{slug}.md" if slug else f"{issue_id:04d}.md"
@@ -244,7 +259,7 @@ def create_issue(
 
     checklist = [{"text": item, "done": False} for item in (checklist_items or [])]
     content = _render_file(fm, description, checklist, [])
-    path = _issues_dir() / filename
+    path = _issues_dir_for_project(project) / filename
     path.write_text(content, encoding="utf-8")
 
     return json.dumps({

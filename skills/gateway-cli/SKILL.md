@@ -200,63 +200,35 @@ gw bookmarks search "rust" --json | jq '.[].url'
 
 ### `gw issues`
 
+Issues are stored as Obsidian markdown files under `Projects/{topic}/{project}/_issues/`.
+`--project` takes a vault-relative path, e.g. `Software/Podderton`.
+
 ```bash
-gw issues list [--project ID] [--filter EXPR] [--sort id|title|due_date|priority|created|updated] \
-    [--order asc|desc] [--page N]
+gw issues list [--project PATH] [--status open|in-progress|done] [--priority INT] [--label TEXT]
 gw issues get ISSUE_ID
-gw issues create TITLE [--project ID] [--description TEXT] [--due TEXT] [--priority TEXT]
-gw issues update ISSUE_ID [--title TEXT] [--description TEXT] [--done true|false] \
-    [--due TEXT] [--priority TEXT]
+gw issues create TITLE --project PATH [--description TEXT] [--due YYYY-MM-DD] \
+    [--priority INT] [--label TEXT]...
+gw issues update ISSUE_ID [--title TEXT] [--status open|in-progress|done] \
+    [--project PATH] [--description TEXT] [--due YYYY-MM-DD] [--priority INT]
 gw issues delete ISSUE_ID
-gw issues comments ISSUE_ID
 gw issues comment ISSUE_ID COMMENT
-gw issues relations ISSUE_ID
-gw issues add-relation ISSUE_ID OTHER_ISSUE_ID KIND
-gw issues remove-relation ISSUE_ID KIND OTHER_ISSUE_ID
-gw issues reminders ISSUE_ID
-gw issues set-reminders ISSUE_ID REMINDERS_JSON
-gw issues labels
-gw issues add-label ISSUE_ID LABEL_ID
-gw issues remove-label ISSUE_ID LABEL_ID
+gw issues check ISSUE_ID ITEM          # add a checklist item
+gw issues toggle ISSUE_ID ITEM_TEXT    # flip done/undone by exact item text
 ```
-
-Relation kinds: `subtask`, `parenttask`, `related`, `blocking`, `blocked`, `precedes`, `follows`.
-
-REMINDERS_JSON format: `'[{"reminder":"2026-06-10T09:00:00Z"}]'` or `'[]'` to clear.
 
 ```bash
 # examples
-gw issues list --project 3 --sort due_date --order asc
-gw issues list --filter "title = bug"
+gw issues list
+gw issues list --project Software/Podderton
+gw issues list --status open --priority 2
+gw issues list --label bug --json | jq '.[].title'
 gw issues get 42
-gw issues create "Fix login bug" --project 3 --due "2026-06-10" --priority high
-gw issues create "Quick capture"                     # -> Inbox
-gw issues update 42 --done true
+gw issues create "Fix login bug" --project Software/Podderton --due 2026-07-10 --priority 2 --label bug
+gw issues update 42 --status in-progress
+gw issues update 42 --status done
 gw issues comment 42 "Investigated — root cause is JWT expiry"
-gw issues add-relation 42 101 blocking
-gw issues set-reminders 42 '[{"reminder":"2026-06-10T09:00:00Z"}]'
-gw issues set-reminders 42 '[]'
-gw issues labels
-gw issues add-label 42 7
-gw issues list --project 3 --json | jq '.[] | select(.done == false) | .title'
-```
-
----
-
-### `gw projects`
-
-```bash
-gw projects list
-gw projects get PROJECT_ID
-gw projects create TITLE [--description TEXT] [--parent ID]
-```
-
-```bash
-# examples
-gw projects list
-gw projects get 3
-gw projects create "New feature" --description "Feature X work" --parent 1
-gw projects list --json | jq '.[] | {id, title}'
+gw issues check 42 "Write regression test"
+gw issues toggle 42 "Write regression test"
 ```
 
 ---
@@ -285,8 +257,8 @@ gw location history --limit 10 --json | jq '.[].lat'
 # List today's events as plain text
 gw calendar list-events today
 
-# Find overdue issues and extract titles
-gw issues list --sort due_date --order asc --json | jq '.[] | select(.done == false) | .title'
+# List open issues for a project
+gw issues list --project Software/Podderton --status open --json | jq '.[].title'
 
 # Search notes and show path + snippet
 gw notes search "meeting notes" --json | jq '.[] | {path, snippet}'
@@ -297,9 +269,10 @@ gw email unread --json | jq '.[].subject'
 # Find favourite bookmarks tagged devops
 gw bookmarks search "is:fav #devops" --json | jq '.[].url'
 
-# Create an issue and immediately set a reminder
-ISSUE_ID=$(gw issues create "Deploy v2" --project 3 --json | jq -r '.id')
-gw issues set-reminders $ISSUE_ID '[{"reminder":"2026-06-10T08:00:00Z"}]'
+# Create an issue with checklist items
+gw issues create "Deploy v2" --project Software/Podderton --due 2026-07-15
+gw issues check 1 "Update changelog"
+gw issues check 1 "Tag release"
 ```
 
 ---

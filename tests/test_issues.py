@@ -5,11 +5,13 @@ import pytest
 import gateway.tools.issues as issues
 from gateway.config import ObsidianConfig
 
+PROJECT = "Software/TestProject"
+
 SAMPLE = """\
 ---
 id: 42
 title: Fix login bug
-project: MyProject
+project: Software/TestProject
 status: open
 priority: 2
 due: '2026-07-01'
@@ -42,6 +44,12 @@ def vault(tmp_path):
     return tmp_path
 
 
+def _make_issues_dir(vault: Path, project: str = PROJECT) -> Path:
+    d = vault / "Projects" / project / "_issues"
+    d.mkdir(parents=True)
+    return d
+
+
 def test_slugify_basic():
     assert issues._slugify("Fix login bug") == "fix-login-bug"
 
@@ -63,19 +71,34 @@ def test_next_id_empty(vault):
 
 
 def test_next_id_increments(vault):
-    d = vault / "Projects" / "_issues"
-    d.mkdir(parents=True)
+    d = _make_issues_dir(vault)
     (d / "0001-first.md").write_text("")
     (d / "0003-third.md").write_text("")
     assert issues._next_id() == 4
 
 
+def test_next_id_across_projects(vault):
+    d1 = _make_issues_dir(vault, "Software/Alpha")
+    d2 = _make_issues_dir(vault, "Homelab/Beta")
+    (d1 / "0001-a.md").write_text("")
+    (d2 / "0005-b.md").write_text("")
+    assert issues._next_id() == 6
+
+
 def test_find_file(vault):
-    d = vault / "Projects" / "_issues"
-    d.mkdir(parents=True)
+    d = _make_issues_dir(vault)
     f = d / "0042-test.md"
     f.write_text("x")
     assert issues._find_file(42) == f
+
+
+def test_find_file_across_projects(vault):
+    d1 = _make_issues_dir(vault, "Software/Alpha")
+    d2 = _make_issues_dir(vault, "Homelab/Beta")
+    (d1 / "0001-a.md").write_text("x")
+    f = d2 / "0002-b.md"
+    f.write_text("x")
+    assert issues._find_file(2) == f
 
 
 def test_find_file_missing(vault):
@@ -105,7 +128,7 @@ def test_parse_body():
 
 def test_render_roundtrip():
     fm = {
-        "id": 1, "title": "Test issue", "project": "P",
+        "id": 1, "title": "Test issue", "project": "Software/TestProject",
         "status": "open", "priority": 0,
         "due": "2026-07-01", "labels": ["bug"], "reminders": [], "related": [],
     }
@@ -130,37 +153,45 @@ def test_list_issues_empty(vault):
 
 
 def test_list_issues_returns_summary(vault):
-    (vault / "Projects" / "_issues").mkdir(parents=True)
-    (vault / "Projects" / "_issues" / "0001-test.md").write_text(
-        "---\nid: 1\ntitle: Test\nproject: Gateway\nstatus: open\npriority: 0\n---\n\n## Checklist\n\n## Comments\n"
+    d = _make_issues_dir(vault)
+    (d / "0001-test.md").write_text(
+        f"---\nid: 1\ntitle: Test\nproject: {PROJECT}\nstatus: open\npriority: 0\n---\n\n## Checklist\n\n## Comments\n"
     )
     result = json.loads(issues.list_issues())
     assert len(result) == 1
     assert result[0]["id"] == 1
     assert result[0]["title"] == "Test"
-    assert result[0]["project"] == "Gateway"
+    assert result[0]["project"] == PROJECT
     assert "checklist" not in result[0]
     assert "comments" not in result[0]
 
 
 def test_list_issues_filter_project(vault):
-    d = vault / "Projects" / "_issues"
-    d.mkdir(parents=True)
-    (d / "0001-alpha.md").write_text("---\nid: 1\ntitle: A\nproject: Alpha\nstatus: open\npriority: 0\n---\n\n## Checklist\n\n## Comments\n")
-    (d / "0002-beta.md").write_text("---\nid: 2\ntitle: B\nproject: Beta\nstatus: open\npriority: 0\n---\n\n## Checklist\n\n## Comments\n")
-    result = json.loads(issues.list_issues(project="Alpha"))
+    d1 = _make_issues_dir(vault, "Software/Alpha")
+    d2 = _make_issues_dir(vault, "Software/Beta")
+    (d1 / "0001-alpha.md").write_text("---\nid: 1\ntitle: A\nproject: Software/Alpha\nstatus: open\npriority: 0\n---\n\n## Checklist\n\n## Comments\n")
+    (d2 / "0002-beta.md").write_text("---\nid: 2\ntitle: B\nproject: Software/Beta\nstatus: open\npriority: 0\n---\n\n## Checklist\n\n## Comments\n")
+    result = json.loads(issues.list_issues(project="Software/Alpha"))
     assert len(result) == 1
     assert result[0]["title"] == "A"
 
 
 def test_list_issues_filter_status(vault):
-    d = vault / "Projects" / "_issues"
-    d.mkdir(parents=True)
-    (d / "0001-open.md").write_text("---\nid: 1\ntitle: Open\nproject: P\nstatus: open\npriority: 0\n---\n\n## Checklist\n\n## Comments\n")
-    (d / "0002-done.md").write_text("---\nid: 2\ntitle: Done\nproject: P\nstatus: done\npriority: 0\n---\n\n## Checklist\n\n## Comments\n")
+    d = _make_issues_dir(vault)
+    (d / "0001-open.md").write_text(f"---\nid: 1\ntitle: Open\nproject: {PROJECT}\nstatus: open\npriority: 0\n---\n\n## Checklist\n\n## Comments\n")
+    (d / "0002-done.md").write_text(f"---\nid: 2\ntitle: Done\nproject: {PROJECT}\nstatus: done\npriority: 0\n---\n\n## Checklist\n\n## Comments\n")
     result = json.loads(issues.list_issues(status="open"))
     assert len(result) == 1
     assert result[0]["id"] == 1
+
+
+def test_list_issues_sorted_by_id(vault):
+    d1 = _make_issues_dir(vault, "Software/Alpha")
+    d2 = _make_issues_dir(vault, "Homelab/Beta")
+    (d2 / "0002-b.md").write_text("---\nid: 2\ntitle: B\nproject: Homelab/Beta\nstatus: open\npriority: 0\n---\n\n## Checklist\n\n## Comments\n")
+    (d1 / "0001-a.md").write_text("---\nid: 1\ntitle: A\nproject: Software/Alpha\nstatus: open\npriority: 0\n---\n\n## Checklist\n\n## Comments\n")
+    result = json.loads(issues.list_issues())
+    assert [r["id"] for r in result] == [1, 2]
 
 
 def test_get_issue_not_found(vault):
@@ -169,8 +200,7 @@ def test_get_issue_not_found(vault):
 
 
 def test_get_issue_full_detail(vault):
-    d = vault / "Projects" / "_issues"
-    d.mkdir(parents=True)
+    d = _make_issues_dir(vault)
     (d / "0042-test.md").write_text(SAMPLE)
     result = json.loads(issues.get_issue(42))
     assert result["id"] == 42
@@ -183,31 +213,45 @@ def test_get_issue_full_detail(vault):
     assert result["comments"][0]["text"] == "First comment."
 
 
+def test_create_requires_project(vault):
+    result = json.loads(issues.create_issue("No project"))
+    assert "error" in result
+
+
 def test_create_assigns_id_1_when_empty(vault):
-    result = json.loads(issues.create_issue("First issue"))
+    result = json.loads(issues.create_issue("First issue", project=PROJECT))
     assert result["id"] == 1
 
 
 def test_create_filename_format(vault):
-    issues.create_issue("Fix Login Bug")
-    files = list((vault / "Projects" / "_issues").glob("*.md"))
-    assert len(files) == 1
-    assert files[0].name == "0001-fix-login-bug.md"
+    result = json.loads(issues.create_issue("Fix Login Bug", project=PROJECT))
+    path = vault / result["path"]
+    assert path.exists()
+    assert path.name == "0001-fix-login-bug.md"
+    assert path.parent == vault / "Projects" / PROJECT / "_issues"
 
 
 def test_create_sequential_ids(vault):
-    issues.create_issue("First")
-    issues.create_issue("Second")
-    issues.create_issue("Third")
+    issues.create_issue("First", project=PROJECT)
+    issues.create_issue("Second", project=PROJECT)
+    issues.create_issue("Third", project=PROJECT)
     r = json.loads(issues.get_issue(3))
     assert r["id"] == 3
     assert r["title"] == "Third"
 
 
+def test_create_sequential_ids_across_projects(vault):
+    issues.create_issue("First", project="Software/Alpha")
+    issues.create_issue("Second", project="Homelab/Beta")
+    r = json.loads(issues.get_issue(2))
+    assert r["id"] == 2
+    assert r["title"] == "Second"
+
+
 def test_create_stores_all_fields(vault):
     issues.create_issue(
         "My issue",
-        project="Gateway",
+        project=PROJECT,
         description="Details here",
         due="2026-07-01",
         priority=2,
@@ -217,7 +261,7 @@ def test_create_stores_all_fields(vault):
         checklist_items=["Step 1", "Step 2"],
     )
     result = json.loads(issues.get_issue(1))
-    assert result["project"] == "Gateway"
+    assert result["project"] == PROJECT
     assert result["description"] == "Details here"
     assert result["due"] == "2026-07-01"
     assert result["priority"] == 2
@@ -230,19 +274,19 @@ def test_create_stores_all_fields(vault):
 
 
 def test_create_status_defaults_to_open(vault):
-    issues.create_issue("Issue")
+    issues.create_issue("Issue", project=PROJECT)
     result = json.loads(issues.get_issue(1))
     assert result["status"] == "open"
 
 
 def test_update_title(vault):
-    issues.create_issue("Original")
+    issues.create_issue("Original", project=PROJECT)
     issues.update_issue(1, title="Updated")
     assert json.loads(issues.get_issue(1))["title"] == "Updated"
 
 
 def test_update_status(vault):
-    issues.create_issue("Issue")
+    issues.create_issue("Issue", project=PROJECT)
     issues.update_issue(1, status="in-progress")
     assert json.loads(issues.get_issue(1))["status"] == "in-progress"
 
@@ -253,13 +297,13 @@ def test_update_not_found(vault):
 
 
 def test_update_invalid_status(vault):
-    issues.create_issue("Issue")
+    issues.create_issue("Issue", project=PROJECT)
     result = json.loads(issues.update_issue(1, status="closed"))
     assert "error" in result
 
 
 def test_delete_issue(vault):
-    issues.create_issue("To delete")
+    issues.create_issue("To delete", project=PROJECT)
     issues.delete_issue(1)
     result = json.loads(issues.get_issue(1))
     assert "error" in result
@@ -271,7 +315,7 @@ def test_delete_not_found(vault):
 
 
 def test_add_comment(vault):
-    issues.create_issue("Issue")
+    issues.create_issue("Issue", project=PROJECT)
     issues.add_issue_comment(1, "First comment")
     result = json.loads(issues.get_issue(1))
     assert len(result["comments"]) == 1
@@ -279,7 +323,7 @@ def test_add_comment(vault):
 
 
 def test_add_comment_appends(vault):
-    issues.create_issue("Issue")
+    issues.create_issue("Issue", project=PROJECT)
     issues.add_issue_comment(1, "Comment A")
     issues.add_issue_comment(1, "Comment B")
     result = json.loads(issues.get_issue(1))
@@ -288,7 +332,7 @@ def test_add_comment_appends(vault):
 
 
 def test_add_checklist_item(vault):
-    issues.create_issue("Issue")
+    issues.create_issue("Issue", project=PROJECT)
     issues.add_checklist_item(1, "New task")
     result = json.loads(issues.get_issue(1))
     assert any(c["text"] == "New task" for c in result["checklist"])
@@ -296,14 +340,14 @@ def test_add_checklist_item(vault):
 
 
 def test_toggle_checklist_item_to_done(vault):
-    issues.create_issue("Issue", checklist_items=["Do thing"])
+    issues.create_issue("Issue", project=PROJECT, checklist_items=["Do thing"])
     issues.toggle_checklist_item(1, "Do thing")
     result = json.loads(issues.get_issue(1))
     assert result["checklist"][0]["done"] is True
 
 
 def test_toggle_checklist_item_back_to_undone(vault):
-    issues.create_issue("Issue", checklist_items=["Do thing"])
+    issues.create_issue("Issue", project=PROJECT, checklist_items=["Do thing"])
     issues.toggle_checklist_item(1, "Do thing")
     issues.toggle_checklist_item(1, "Do thing")
     result = json.loads(issues.get_issue(1))
@@ -311,13 +355,13 @@ def test_toggle_checklist_item_back_to_undone(vault):
 
 
 def test_toggle_checklist_item_not_found(vault):
-    issues.create_issue("Issue")
+    issues.create_issue("Issue", project=PROJECT)
     result = json.loads(issues.toggle_checklist_item(1, "Nonexistent"))
     assert "error" in result
 
 
 def test_update_preserves_checklist_and_comments(vault):
-    issues.create_issue("Issue", checklist_items=["Step 1"])
+    issues.create_issue("Issue", project=PROJECT, checklist_items=["Step 1"])
     issues.add_issue_comment(1, "A comment")
     issues.update_issue(1, status="done")
     result = json.loads(issues.get_issue(1))
