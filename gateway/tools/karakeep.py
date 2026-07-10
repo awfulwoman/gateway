@@ -138,7 +138,7 @@ def detach_tags(bookmark_id: str, tags: str) -> str:
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     body = {"tags": [{"tagName": t} for t in tag_list]}
     with _client() as c:
-        r = c.delete(f"/bookmarks/{bookmark_id}/tags", json=body)
+        r = c.request("DELETE", f"/bookmarks/{bookmark_id}/tags", json=body)
         r.raise_for_status()
     return json.dumps({"status": "tags_detached", "tags": tag_list})
 
