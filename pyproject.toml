@@ -11,6 +11,9 @@ dependencies = [
     "pyobjc-framework-Contacts>=10",
     "pyobjc-framework-CoreLocation>=10",
     "httpx>=0.25",
+    "anyio>=4",
+    "uvicorn>=0.20",
+    "starlette>=0.27",
 ]
 
 [dependency-groups]
