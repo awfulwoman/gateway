@@ -6,7 +6,7 @@ from gateway.tools import calendar, reminders, contacts, email, obsidian, karake
 
 
 def create_server(config: Config) -> FastMCP:
-    mcp = FastMCP("gateway", host=config.server.host, port=config.server.port, stateless_http=True)
+    mcp = FastMCP("gateway", host=config.server.host, port=config.server.port, stateless_http=True, json_response=True)
 
     calendar.register(mcp)
     reminders.register(mcp)
