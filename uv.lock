@@ -187,6 +187,7 @@ name = "gateway"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "anyio" },
     { name = "click" },
     { name = "httpx" },
     { name = "mcp", extra = ["cli"] },
@@ -195,6 +196,8 @@ dependencies = [
     { name = "pyobjc-framework-corelocation" },
     { name = "pyobjc-framework-eventkit" },
     { name = "pyyaml" },
+    { name = "starlette" },
+    { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
@@ -205,6 +208,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anyio", specifier = ">=4" },
     { name = "click", specifier = ">=8.0" },
     { name = "httpx", specifier = ">=0.25" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.0" },
@@ -213,6 +217,8 @@ requires-dist = [
     { name = "pyobjc-framework-corelocation", specifier = ">=10" },
     { name = "pyobjc-framework-eventkit", specifier = ">=10" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "starlette", specifier = ">=0.27" },
+    { name = "uvicorn", specifier = ">=0.20" },
 ]
 
 [package.metadata.requires-dev]
