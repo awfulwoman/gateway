@@ -9,11 +9,11 @@ dependencies = [
     "pyyaml>=6.0",
     "pyobjc-framework-EventKit>=10",
     "pyobjc-framework-Contacts>=10",
-    "pyobjc-framework-CoreLocation>=10",
     "httpx>=0.25",
     "anyio>=4",
     "uvicorn>=0.20",
     "starlette>=0.27",
+    "caldav>=3.2.1",
 ]
 
 [dependency-groups]

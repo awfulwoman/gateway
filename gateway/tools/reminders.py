@@ -1,111 +1,113 @@
 from __future__ import annotations
 import json
-import threading
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
+import caldav
+import icalendar
+from gateway.config import RemindersConfig
 
-_ek_store = None
+_config: RemindersConfig | None = None
+_client: caldav.DAVClient | None = None
 
-
-def _get_store():
-    global _ek_store
-    if _ek_store is not None:
-        return _ek_store
-    import EventKit
-
-    store = EventKit.EKEventStore.alloc().init()
-    done = threading.Event()
-
-    def cb(granted, error):
-        done.set()
-
-    try:
-        store.requestFullAccessToRemindersWithCompletion_(cb)
-    except AttributeError:
-        store.requestAccessToEntityType_completion_(EventKit.EKEntityTypeReminder, cb)
-
-    done.wait(timeout=10)
-    _ek_store = store
-    return store
+DEFAULT_LIST_NAME = "Reminders"
 
 
-def _fetch_reminders(store, include_completed: bool) -> list:
-    done = threading.Event()
-    found: list = []
-
-    if include_completed:
-        pred = store.predicateForRemindersInCalendars_(None)
-    else:
-        pred = store.predicateForIncompleteRemindersWithDueDateStarting_ending_calendars_(
-            None, None, None
-        )
-
-    def cb(reminders):
-        found.extend(reminders or [])
-        done.set()
-
-    store.fetchRemindersMatchingPredicate_completion_(pred, cb)
-    done.wait(timeout=10)
-    return found
+def init(config: RemindersConfig) -> None:
+    global _config, _client
+    _config = config
+    _client = None
 
 
-def _geocode(location_name: str):
-    """Return (lat, lon) for a location name, or None if geocoding fails."""
-    import CoreLocation
-    done = threading.Event()
-    result = [None]
-
-    geocoder = CoreLocation.CLGeocoder.alloc().init()
-
-    def cb(placemarks, error):
-        if placemarks and len(placemarks) > 0:
-            loc = placemarks[0].location()
-            if loc:
-                coord = loc.coordinate()
-                result[0] = (coord.latitude, coord.longitude)
-        done.set()
-
-    geocoder.geocodeAddressString_completionHandler_(location_name, cb)
-    done.wait(timeout=10)
-    return result[0]
+def _get_client() -> caldav.DAVClient:
+    global _client
+    if _client is None:
+        assert _config and _config.base_url, "Reminders not configured (GATEWAY_REMINDERS__BASE_URL required)"
+        _client = caldav.DAVClient(url=_config.base_url, username=_config.username, password=_config.password)
+    return _client
 
 
-def _reminder_to_dict(r) -> dict:
-    due = None
-    if r.dueDateComponents():
-        dc = r.dueDateComponents()
-        try:
-            due = f"{dc.year():04d}-{dc.month():02d}-{dc.day():02d}"
-        except Exception:
-            due = str(dc)
+def _todo_calendars() -> list:
+    principal = _get_client().principal()
+    return [c for c in principal.calendars() if "VTODO" in c.get_supported_components()]
+
+
+def _find_calendar(list_name: str):
+    for cal in _todo_calendars():
+        if str(cal.name or "").lower() == list_name.lower():
+            return cal
+    return None
+
+
+def _default_calendar():
+    cals = _todo_calendars()
+    for cal in cals:
+        if str(cal.name or "").lower() == DEFAULT_LIST_NAME.lower():
+            return cal
+    if cals:
+        return cals[0]
+    principal = _get_client().principal()
+    return principal.make_calendar(name=DEFAULT_LIST_NAME, supported_calendar_component_set=["VTODO"])
+
+
+def _due_str(vtodo) -> str | None:
+    due = vtodo.get("due")
+    if not due:
+        return None
+    dt = due.dt
+    return dt.isoformat() if hasattr(dt, "isoformat") else str(dt)
+
+
+def _todo_to_dict(todo) -> dict:
+    vtodo = todo.icalendar_component
+    status = str(vtodo.get("status", "NEEDS-ACTION"))
     return {
-        "title": str(r.title() or ""),
-        "completed": bool(r.isCompleted()),
-        "due": due,
-        "notes": str(r.notes() or ""),
-        "priority": int(r.priority()),
-        "list": str(r.calendar().title() or ""),
+        "title": str(vtodo.get("summary", "")),
+        "completed": status == "COMPLETED",
+        "due": _due_str(vtodo),
+        "notes": str(vtodo.get("description", "")),
+        "priority": int(vtodo.get("priority") or 0),
+        "list": str(todo.parent.name) if todo.parent else "",
     }
+
+
+def _build_vtodo_ical(title: str, due_iso: str, notes: str, priority: int) -> str:
+    cal = icalendar.Calendar()
+    cal.add("prodid", "-//gateway//reminders//EN")
+    cal.add("version", "2.0")
+    todo = icalendar.Todo()
+    todo.add("uid", f"{uuid.uuid4()}@gateway")
+    todo.add("summary", title)
+    todo.add("dtstamp", datetime.now(timezone.utc))
+    todo.add("status", "NEEDS-ACTION")
+    if notes:
+        todo.add("description", notes)
+    if priority:
+        todo.add("priority", priority)
+    if due_iso:
+        dt = datetime.fromisoformat(due_iso)
+        todo.add("due", dt if (dt.hour or dt.minute) else dt.date())
+    cal.add_component(todo)
+    return cal.to_ical().decode("utf-8")
 
 
 def list_reminder_lists() -> str:
     """List all reminder lists (calendars) with their names and identifiers."""
-    import EventKit
-    store = _get_store()
-    cals = store.calendarsForEntityType_(EventKit.EKEntityTypeReminder)
-    results = [{"name": str(c.title()), "id": str(c.calendarIdentifier())} for c in (cals or [])]
+    results = [{"name": str(cal.name), "id": str(cal.url)} for cal in _todo_calendars()]
     return json.dumps(results)
 
 
 def list_reminders(include_completed: bool = False, list_name: str = "") -> str:
     """List reminders. Set include_completed=true to include completed reminders. Optionally filter by list_name."""
-    store = _get_store()
-    found = _fetch_reminders(store, include_completed)
+    if list_name:
+        cal = _find_calendar(list_name)
+        cals = [cal] if cal else []
+    else:
+        cals = _todo_calendars()
 
     results = []
-    for r in found:
-        if list_name and str(r.calendar().title() or "").lower() != list_name.lower():
-            continue
-        results.append(_reminder_to_dict(r))
+    for cal in cals:
+        for todo in cal.get_todos(include_completed=include_completed):
+            results.append(_todo_to_dict(todo))
     return json.dumps(results)
 
 
@@ -118,103 +120,58 @@ def create_reminder(
     location_name: str = "",
     arrive_or_leave: str = "arrive",
 ) -> str:
-    """Create a reminder. due_iso is an optional ISO 8601 date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS). priority: 0=none, 1=high, 5=medium, 9=low. location_name triggers the reminder on arrival/departure; arrive_or_leave is 'arrive' (default) or 'leave'."""
-    import EventKit
-    import Foundation
+    """Create a reminder. due_iso is an optional ISO 8601 date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS). priority: 0=none, 1=high, 5=medium, 9=low. location_name is stored as a plain-text note (CalDAV has no portable geofence trigger); arrive_or_leave is 'arrive' (default) or 'leave'."""
+    cal = _find_calendar(list_name) if list_name else None
+    if cal is None:
+        cal = _default_calendar()
 
-    store = _get_store()
-    reminder = EventKit.EKReminder.reminderWithEventStore_(store)
-    reminder.setTitle_(title)
-    if notes:
-        reminder.setNotes_(notes)
-    if priority:
-        reminder.setPriority_(priority)
-
-    cal = None
-    if list_name:
-        cals = store.calendarsForEntityType_(EventKit.EKEntityTypeReminder)
-        for c in (cals or []):
-            if str(c.title()).lower() == list_name.lower():
-                cal = c
-                break
-    reminder.setCalendar_(cal or store.defaultCalendarForNewReminders())
-
-    if due_iso:
-        dt = datetime.fromisoformat(due_iso)
-        components = Foundation.NSDateComponents.alloc().init()
-        components.setYear_(dt.year)
-        components.setMonth_(dt.month)
-        components.setDay_(dt.day)
-        if dt.hour or dt.minute:
-            components.setHour_(dt.hour)
-            components.setMinute_(dt.minute)
-        reminder.setDueDateComponents_(components)
-
+    full_notes = notes
     if location_name:
-        import CoreLocation
-        coords = _geocode(location_name)
-        alarm = EventKit.EKAlarm.alloc().init()
-        proximity = (
-            EventKit.EKAlarmProximityLeave
-            if arrive_or_leave == "leave"
-            else EventKit.EKAlarmProximityEnter
-        )
-        alarm.setProximity_(proximity)
-        struct_loc = EventKit.EKStructuredLocation.locationWithTitle_(location_name)
-        if coords:
-            cl_loc = CoreLocation.CLLocation.alloc().initWithLatitude_longitude_(coords[0], coords[1])
-            struct_loc.setGeoLocation_(cl_loc)
-            struct_loc.setRadius_(200)
-        alarm.setStructuredLocation_(struct_loc)
-        reminder.addAlarm_(alarm)
+        marker = f"[location: {arrive_or_leave} {location_name}]"
+        full_notes = f"{notes}\n{marker}".strip() if notes else marker
 
-    ok = store.saveReminder_commit_error_(reminder, True, None)
-    if ok:
-        result = {"status": "created", "title": title}
-        if location_name:
-            result["location"] = location_name
-            result["geocoded"] = coords is not None
-        return json.dumps(result)
-    return json.dumps({"status": "error", "message": f"Failed to create reminder: {title}"})
+    ical = _build_vtodo_ical(title, due_iso, full_notes, priority)
+    cal.add_todo(ical)
+
+    result = {"status": "created", "title": title}
+    if location_name:
+        result["location"] = location_name
+    return json.dumps(result)
 
 
 def complete_reminder(title: str) -> str:
     """Mark a reminder as completed by title (case-insensitive substring match)."""
-    store = _get_store()
-    found = _fetch_reminders(store, False)
-
-    for r in found:
-        if title.lower() in str(r.title() or "").lower():
-            r.setCompleted_(True)
-            store.saveReminder_commit_error_(r, True, None)
-            return json.dumps({"status": "completed", "title": str(r.title())})
+    q = title.lower()
+    for cal in _todo_calendars():
+        for todo in cal.get_todos(include_completed=False):
+            summary = str(todo.icalendar_component.get("summary", ""))
+            if q in summary.lower():
+                todo.complete()
+                return json.dumps({"status": "completed", "title": summary})
     return json.dumps({"status": "not_found", "message": f"No incomplete reminder matching: {title}"})
 
 
 def delete_reminder(title: str) -> str:
     """Delete a reminder by title (case-insensitive substring match). Deletes the first match."""
-    store = _get_store()
-    found = _fetch_reminders(store, True)
-
-    for r in found:
-        if title.lower() in str(r.title() or "").lower():
-            ok = store.removeReminder_commit_error_(r, True, None)
-            if ok:
-                return json.dumps({"status": "deleted", "title": str(r.title())})
-            return json.dumps({"status": "error", "message": "Failed to delete reminder"})
+    q = title.lower()
+    for cal in _todo_calendars():
+        for todo in cal.get_todos(include_completed=True):
+            summary = str(todo.icalendar_component.get("summary", ""))
+            if q in summary.lower():
+                todo.delete()
+                return json.dumps({"status": "deleted", "title": summary})
     return json.dumps({"status": "not_found", "message": f"No reminder matching: {title}"})
 
 
 def search_reminders(query: str) -> str:
     """Search reminders by title or notes (case-insensitive). Includes both complete and incomplete."""
-    store = _get_store()
-    found = _fetch_reminders(store, True)
-
     q = query.lower()
-    results = [
-        _reminder_to_dict(r) for r in found
-        if q in str(r.title() or "").lower() or q in str(r.notes() or "").lower()
-    ]
+    results = []
+    for cal in _todo_calendars():
+        for todo in cal.get_todos(include_completed=True):
+            d = _todo_to_dict(todo)
+            if q in d["title"].lower() or q in d["notes"].lower():
+                results.append(d)
     return json.dumps(results)
 
 

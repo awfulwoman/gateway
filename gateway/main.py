@@ -37,6 +37,7 @@ def create_server(config: Config) -> FastMCP:
     mcp = FastMCP("gateway", host=config.server.host, port=config.server.port, stateless_http=True, json_response=True)
 
     calendar.register(mcp)
+    reminders.init(config.reminders)
     reminders.register(mcp)
     contacts.register(mcp)
 
