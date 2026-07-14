@@ -2,14 +2,12 @@
 """One-off migration: copy existing Apple Reminders (via EventKit) into Radicale.
 
 Run this once, on the machine where EventKit already has Reminders access
-(the one gateway currently runs on), pointed at the deployed Radicale
-instance. Not part of the gateway package - delete after use.
+(the one gateway currently runs on). Reads GATEWAY_REMINDERS__* from the
+gateway's own .env file (via gateway.config.Config), same as the server
+does. Not part of the gateway package - delete after use.
 
 Usage:
-    GATEWAY_REMINDERS__BASE_URL=https://radicale.example.com \\
-    GATEWAY_REMINDERS__USERNAME=charlie \\
-    GATEWAY_REMINDERS__PASSWORD=... \\
-    uv run scripts/migrate_reminders_to_radicale.py [--dry-run]
+    cd /opt/awfulwoman/gateway && uv run scripts/migrate_reminders_to_radicale.py [--dry-run]
 """
 from __future__ import annotations
 import os
@@ -18,7 +16,7 @@ import threading
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from gateway.config import RemindersConfig
+from gateway.config import Config
 from gateway.tools import reminders
 
 
@@ -71,12 +69,8 @@ def _fetch_apple_reminders() -> list[dict]:
 def main() -> None:
     dry_run = "--dry-run" in sys.argv
 
-    config = RemindersConfig(
-        base_url=os.environ["GATEWAY_REMINDERS__BASE_URL"],
-        username=os.environ["GATEWAY_REMINDERS__USERNAME"],
-        password=os.environ["GATEWAY_REMINDERS__PASSWORD"],
-    )
-    reminders.init(config)
+    config = Config()
+    reminders.init(config.reminders)
 
     items = _fetch_apple_reminders()
     print(f"Found {len(items)} reminders in Apple Reminders.")
