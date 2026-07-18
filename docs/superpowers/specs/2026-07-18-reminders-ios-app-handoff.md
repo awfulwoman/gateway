@@ -38,9 +38,10 @@ the entire app against a Gateway instance reachable at a configurable base URL.
 
 ### Out of scope for v1
 
-Subtasks/nesting, recurrence, sharing/multi-user, multiple accounts, widgets,
+Subtasks/nesting, recurrence, sharing/multi-user, multiple accounts,
 App Intents/Siri, real-time push. (The protocol reserves room for subtasks and
-recurrence; see §3.)
+recurrence; see §3.) A simple read-only home/lock-screen **widget is in scope** —
+see §9.1.
 
 ---
 
@@ -94,7 +95,7 @@ A reminder is a **flat JSON object**. All timestamps are **RFC 3339 UTC** with a
 | `id` | string (UUID) | Stable identity. **The app generates it** (`UUID().uuidString`) when creating a reminder, and never changes it. |
 | `title` | string | Required, non-empty. |
 | `notes` | string \| null | Free text. |
-| `due` | string \| null | **`YYYY-MM-DD`** = all-day (due at end of the *local* day). **Full RFC 3339** (has a `T`) = a specific time. The presence of `T` is the only signal — there is no separate all-day flag. |
+| `due` | string \| null | **`YYYY-MM-DD`** = all-day; the app notifies at **09:00 local time** on that date (see §7). **Full RFC 3339** (has a `T`) = a specific time. The presence of `T` is the only signal — there is no separate all-day flag. |
 | `priority` | int | `0` none · `1` high · `5` medium · `9` low. (Map to a 4-tier UI: none/high/medium/low.) |
 | `list` | string | List/group name, e.g. `"Reminders"`, `"Shopping"`. Lists are **implicit**: a list exists because a reminder names it. Default new reminders to `"Reminders"`. No separate list resource. |
 | `done` | bool | Completion. |
@@ -111,9 +112,11 @@ the geofence radius in metres (default 150 if you create one without asking).
 
 **Forward-compat rule:** the server may add fields later. **Preserve and
 round-trip any JSON keys you don't recognise** — decode into your model, keep the
-originals, and send them back on `PUT`. Do not drop unknown keys. (`parent_id` and
-`rrule` are reserved for future subtasks/recurrence; you can ignore their values
-in v1 but must not discard them.)
+originals, and send them back on `PUT`. Do not drop unknown keys. `parent_id` and
+`rrule` are reserved for future subtasks/recurrence: in v1 treat them **exactly as
+unknown keys** — do not model or act on them, keep them in `extraJSON` (§6), and
+round-trip them unchanged. The rule is general: *any* key you decode but do not
+store in a first-class field goes into `extraJSON` and comes back out on encode.
 
 ---
 
@@ -245,13 +248,19 @@ Reminder
 
   // local-only, never sent:
   dirty: Bool           // has unpushed local changes
-  extraJSON: Data?      // verbatim unknown keys, re-merged on encode (forward-compat)
+  extraJSON: Data?      // verbatim keys with no first-class field above (incl. parent_id, rrule),
+                        // re-merged on encode (forward-compat)
 ```
 
 Encode/decode helpers convert between this and the wire JSON, including:
 `due` date-only vs timed (emit `YYYY-MM-DD` vs full RFC 3339); RFC 3339 UTC for all
 timestamps; `location` ⇄ the flat `loc*` fields; merge `extraJSON` back in on
 encode.
+
+**Put the store in an App Group container** (`group.<your-bundle-id>`) so the
+widget extension (§9.1) can read it. Configure the SwiftData `ModelContainer` (or
+Core Data store) with that shared URL from the start — retrofitting later is
+painful. The main app is the only writer; the widget reads.
 
 ---
 
@@ -264,9 +273,9 @@ Always authorization; explain why in the prompt).
 ### Time reminders
 
 For each non-done reminder with a `due`, schedule a
-`UNCalendarNotificationTrigger`. For a date-only `due`, fire at a sensible time at
-the **end of the local day** (e.g. 09:00 the day it's due, or the owner's chosen
-default — pick one and document it). Reschedule on edit; cancel on complete/delete.
+`UNCalendarNotificationTrigger`. For a date-only `due`, fire at **09:00 local time
+on the due date** (the fixed v1 default; a user-configurable time is out of scope).
+Reschedule on edit; cancel on complete/delete.
 
 ### Location reminders (on-device geofencing)
 
@@ -314,6 +323,31 @@ for a display name).
 
 Keep it plain and native. No design system required.
 
+### 9.1 Widget (WidgetKit)
+
+A simple, **read-only** widget showing upcoming reminders. Read-only keeps it
+trivial — no App Intents, no completing from the widget in v1.
+
+- **Extension target** in the same App Group as the app (§6); the widget's
+  `TimelineProvider` reads the shared local store directly. **It does not make
+  network calls** — it only reflects whatever the last app sync wrote.
+- **Content**: the next incomplete, non-deleted reminders, sorted by due
+  (soonest first; undated last), then priority. Show title + a short due label
+  (e.g. "Today", "Tomorrow", "Fri", or "—"); a 📍 glyph for location reminders.
+- **Families**:
+  - `systemSmall`: count of reminders due today + the single next one.
+  - `systemMedium`: the next ~3–4 reminders as a list.
+  - (Optional) `accessoryRectangular` lock-screen: next reminder + count.
+- **Timeline**: a single entry for "now" plus a refresh at the next due boundary
+  (e.g. start of next day) so relative labels stay correct; otherwise rely on
+  explicit reloads.
+- **Refresh**: after every successful sync cycle the app calls
+  `WidgetCenter.shared.reloadAllTimelines()` so the widget reflects server-side
+  changes. Also reload after a local edit.
+- **Tap**: opens the app (a deep link to the relevant list is a nice-to-have, not
+  required).
+- **Empty state**: "No reminders" / "All done".
+
 ---
 
 ## 10. Acceptance / verification
@@ -337,6 +371,9 @@ token). Verify:
 7. **Location notification**: set a geofence at a nearby place; crossing it fires a
    notification. Simulate with Xcode's location simulation if needed.
 8. **Offline**: create/edit offline, then reconnect → changes push.
+9. **Widget**: add the widget → it shows upcoming reminders; after a sync that
+   changes/adds/completes a reminder, the widget updates (reflects the shared
+   store, no separate network call).
 
 ### Protocol conformance unit tests (write these)
 
