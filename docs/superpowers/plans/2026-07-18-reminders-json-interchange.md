@@ -31,7 +31,11 @@ New package `gateway/reminders/` (`__init__.py`, `store.py`, `geocode.py`, `http
   EXISTS` + index (schema verbatim from spec). Idempotent.
 - `_row_to_dict(row) -> dict` / `_dict_to_params(d) -> dict` — map the flat
   `loc_*` columns ⇆ nested `location` object; `done`/`deleted` int⇄bool;
-  `location` is `None` when `loc_lat` is NULL.
+  `location` is `None` when `loc_lat` is NULL. Also handle the `extra` column:
+  `_dict_to_params` JSON-encodes every key with no column of its own into `extra`
+  (`None`/`{}` when there are none); `_row_to_dict` decodes `extra` and merges it
+  back at top level, with first-class columns winning on collision. This is what
+  keeps reserved (`parent_id`, `rrule`) and future fields from being dropped.
 - `list_reminders(since=None, include_deleted=True, list_name=None) -> list[dict]`
   — `WHERE updated_at > ?` when `since`; `AND deleted=0` unless `include_deleted`;
   `AND list=?` when `list_name`. (Sync path wants tombstones; MCP/CLI path doesn't.)
@@ -164,7 +168,8 @@ Delete `scripts/migrate_reminders_to_radicale.py`.
 
 - `tests/test_reminders_store.py` — temp-file db: LWW accept/reject (`Stale`),
   tombstone + resurrect ordering by timestamp, `since` filter, `location`
-  round-trip, list/list_name filter, `gc_tombstones`.
+  round-trip, unknown-key round-trip (`parent_id`/`rrule`/arbitrary key preserved
+  via `extra`), list/list_name filter, `gc_tombstones`.
 - `tests/test_reminders_http.py` — Starlette `TestClient`: 401 no/bad token,
   PUT/GET/DELETE happy paths, 409 stale + `current`, `POST /sync` batch with
   mixed accept/reject, `since` continuity, `/v1/geocode` fwd+reverse, 400 on

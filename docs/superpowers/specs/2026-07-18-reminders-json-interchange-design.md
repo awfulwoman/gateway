@@ -109,7 +109,10 @@ A reminder is a flat JSON object. All timestamps are **RFC 3339 UTC** (`Z`).
 
 **Reserved for later (not in v1):** `parent_id` (subtasks), `rrule` (recurrence).
 Clients must round-trip unknown fields untouched so the format can grow without a
-version bump.
+version bump — and **so must the server**. Any JSON key that has no first-class
+column is stashed verbatim in the `extra` column (see Storage) and merged back on
+read, so `parent_id`, `rrule`, and any future field survive a write→read round-trip
+through Gateway rather than being dropped.
 
 ---
 
@@ -212,6 +215,10 @@ resync from scratch.
 - Missing/unknown token → `401`. No token → `401`. Constant-time compare.
 - TLS is terminated by the existing reverse proxy in front of Gateway (same as the
   MCP surface); tokens never travel in cleartext off-device.
+- **Reachability:** the phone reaches Gateway **over the VPN** — Gateway is not
+  exposed to the public internet. The app's base URL is Gateway's VPN address, and
+  the bearer token is the second factor behind the VPN. Off-VPN, sync simply pauses;
+  the app is offline-first (local mirror is SSOT) and reconciles on next connect.
 
 ---
 
@@ -236,7 +243,9 @@ CREATE TABLE reminders (
   loc_trigger  TEXT,               -- 'arrive' | 'leave' | NULL
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL,
-  deleted      INTEGER NOT NULL DEFAULT 0
+  deleted      INTEGER NOT NULL DEFAULT 0,
+  extra        TEXT                 -- JSON blob of any keys with no column above
+                                    -- (e.g. reserved parent_id/rrule, future fields)
 );
 CREATE INDEX idx_reminders_updated_at ON reminders(updated_at);
 ```
@@ -249,7 +258,10 @@ of truth:
 - `upsert(reminder) -> dict` (applies LWW; returns stored object; raises `Stale` if rejected)
 - `soft_delete(id, updated_at=None) -> dict`
 - `gc_tombstones(older_than_days=30) -> int`
-- `_row_to_dict` / `_dict_to_row` handle the `location` object ⇆ flat columns.
+- `_row_to_dict` / `_dict_to_row` handle the `location` object ⇆ flat columns, and
+  the `extra` column ⇆ unknown keys: on write, any key not mapped to a column is
+  JSON-encoded into `extra`; on read, `extra` is decoded and merged back into the
+  top-level object (first-class columns win on any key collision).
 
 WAL mode on; the API, CLI, and MCP tools are all in-process (one uvicorn), so
 SQLite's single-writer is a non-issue.
@@ -331,7 +343,9 @@ unknown JSON fields.
 ## Testing
 
 - `tests/test_reminders_store.py` — LWW acceptance/rejection, tombstone + resurrect
-  ordering, `since` filtering, location round-trip, GC.
+  ordering, `since` filtering, location round-trip, unknown-key round-trip (a
+  reminder carrying `parent_id`/`rrule`/a made-up key survives upsert→get intact
+  via `extra`), GC.
 - `tests/test_reminders_http.py` — auth (401), PUT/GET/DELETE, `409` on stale,
   `POST /sync` batch incl. `rejected[]`, `since` cursor continuity, `/v1/geocode`
   forward + reverse and `400` on an unresolvable name (Nominatim mocked; Starlette
