@@ -201,7 +201,9 @@ Delete `scripts/migrate_reminders_to_radicale.py`.
 
 ## Non-goals (this plan)
 
-- The iOS app itself (separate repo/effort; spec's "client contract" is the API it targets).
+- The iOS app itself — built in a **separate project** from its own self-contained
+  brief: `docs/superpowers/specs/2026-07-18-reminders-ios-app-handoff.md`. This plan
+  only delivers the `/v1` API + store it targets.
 - Subtasks, recurrence, multi-user, real-time push, per-field merge.
 - A public `gw geocode` command (server-internal for now).
 - Removing `caldav`/`icalendar` from deps — keep until after migration, drop then.

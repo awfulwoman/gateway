@@ -3,6 +3,15 @@
 **Date:** 2026-07-18
 **Status:** Proposed
 
+**Companion docs:**
+- Gateway/MCP build: `docs/superpowers/plans/2026-07-18-reminders-json-interchange.md`
+- iOS app build (self-contained handoff, separate project): `docs/superpowers/specs/2026-07-18-reminders-ios-app-handoff.md`
+
+This spec is the protocol's source of truth. The iOS handoff doc restates the wire
+protocol from the client's perspective (intentionally duplicated so it needs no
+Gateway-repo context); **if the two ever disagree, this spec wins** — update the
+handoff doc to match.
+
 ## Motivation
 
 Every off-the-shelf reminder app suffers cloud lock-in, and the self-hosted
@@ -306,24 +315,16 @@ The old `BASE_URL/USERNAME/PASSWORD` Radicale vars are removed.
 
 ## iOS client contract (app to be built)
 
-Not a full app design — just what the format obliges the client to do:
-
-- **Local mirror** (SwiftData or a JSON file) of reminder objects, each with a
-  local `dirty` flag; the app is offline-first and the mirror is the UI's SSOT.
-- **Sync** on: app foreground, pull-to-refresh, and Background App Refresh. One
-  `POST /v1/reminders/sync` per cycle (algorithm above). No server push needed.
-- **Auth**: base URL + bearer token stored in Keychain; entered once in settings.
-- **Geofencing**: for each non-done reminder with `location`, register a
-  `CLCircularRegion` (`radius_m`, `trigger` → `notifyOnEntry`/`notifyOnExit`);
-  on the region event fire a local `UNNotification`. iOS caps monitored regions at
-  **20** — monitor the 20 nearest and re-evaluate on significant location change.
-  On `done`/delete, remove the region.
-- **Time reminders**: schedule a local `UNCalendarNotificationTrigger` from `due`.
-- **Unknown fields**: preserve and round-trip (forward-compat).
-
-Much of NowThis is reusable (models, list UI, notification scheduling); the
-CalDAV sync engine is replaced by this JSON sync. Whether to fork NowThis or start
-fresh is an app-side decision, out of scope here.
+The full, self-contained build brief lives in
+`docs/superpowers/specs/2026-07-18-reminders-ios-app-handoff.md` — a **fresh,
+from-scratch app in a separate project**, no NowThis carryover. It restates this
+protocol from the client's side and specifies the local model, sync loop,
+geofencing, notifications, UI scope, and acceptance tests. In brief, the format
+obliges the client to: keep an offline-first local mirror (SSOT) with a `dirty`
+flag; sync via `POST /v1/reminders/sync` (LWW, algorithm above); store base URL +
+bearer token in Keychain; do on-device geofencing (`CLCircularRegion`, nearest-20
+cap); resolve names→coords via `GET /v1/geocode` (never `CLGeocoder`); and preserve
+unknown JSON fields.
 
 ---
 
