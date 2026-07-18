@@ -1,12 +1,16 @@
 from __future__ import annotations
 import argparse
+import logging
 import anyio
 import uvicorn
 from starlette.requests import ClientDisconnect
 from mcp.server.fastmcp import FastMCP
 from gateway.config import Config
+from gateway.http_auth import BearerAuthMiddleware
 from gateway.reminders import http as reminders_http
 from gateway.tools import calendar, reminders, contacts, email, obsidian, karakeep, owntracks, issues
+
+logger = logging.getLogger("gateway")
 
 
 class _DisconnectMiddleware:
@@ -23,9 +27,12 @@ class _DisconnectMiddleware:
             pass
 
 
-async def _run_http(mcp: FastMCP) -> None:
+async def _run_http(mcp: FastMCP, config: Config) -> None:
+    if not config.server.auth_tokens:
+        logger.warning("MCP HTTP auth DISABLED — set GATEWAY_SERVER__AUTH_TOKENS to require a bearer token on /mcp")
     app = mcp.streamable_http_app()
     app.router.routes.extend(reminders_http.routes)
+    app = BearerAuthMiddleware(app, config.server.auth_tokens)
     app = _DisconnectMiddleware(app)
     cfg = uvicorn.Config(
         app,
@@ -79,7 +86,7 @@ def main() -> None:
     if args.transport == "stdio":
         mcp.run(transport="stdio")
     else:
-        anyio.run(_run_http, mcp)
+        anyio.run(_run_http, mcp, config)
 
 
 if __name__ == "__main__":

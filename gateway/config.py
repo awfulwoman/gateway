@@ -51,6 +51,12 @@ class RemindersConfig(BaseModel):
 class ServerConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 4000
+    auth_tokens: Annotated[list[str], NoDecode] = []
+
+    @field_validator("auth_tokens", mode="before")
+    @classmethod
+    def _split_tokens(cls, v):
+        return _split_csv(v)
 
 
 class Config(BaseSettings):
