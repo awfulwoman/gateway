@@ -56,14 +56,16 @@ def search(obj: dict, query: str, as_json: bool) -> None:
 @click.option("--priority", default=0, type=int)
 @click.option("--location", "location_name", default="")
 @click.option("--arrive-or-leave", default="arrive", type=click.Choice(["arrive", "leave"]))
+@click.option("--radius", "radius_m", default=150, type=int, help="Geofence radius in metres")
 @click.option("--json", "as_json", is_flag=True)
 @click.pass_obj
-def create(obj: dict, title: str, list_name: str, due_iso: str, notes: str, priority: int, location_name: str, arrive_or_leave: str, as_json: bool) -> None:
+def create(obj: dict, title: str, list_name: str, due_iso: str, notes: str, priority: int, location_name: str, arrive_or_leave: str, radius_m: int, as_json: bool) -> None:
     """Create a reminder."""
     try:
         data = client.call_tool(obj["server"], "create_reminder", {
             "title": title, "due_iso": due_iso, "notes": notes, "list_name": list_name,
             "priority": priority, "location_name": location_name, "arrive_or_leave": arrive_or_leave,
+            "radius_m": radius_m,
         })
     except client.GatewayError as e:
         raise click.ClickException(str(e))

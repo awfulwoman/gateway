@@ -27,10 +27,14 @@ def reminders(data: list) -> str:
         return "No reminders."
     lines = []
     for r in data:
-        done = "x" if r.get("completed") else " "
+        done = "x" if r.get("done") else " "
         due = f"  due:{r['due']}" if r.get("due") else ""
         lst = f"  [{r['list']}]" if r.get("list") else ""
         lines.append(f"[{done}] {r['title']}{due}{lst}")
+        loc = r.get("location")
+        if loc:
+            name = loc.get("name") or f"{loc.get('lat')},{loc.get('lon')}"
+            lines.append(f"      📍 {name} ({loc.get('trigger', 'arrive')}, {loc.get('radius_m', 150)}m)")
     return "\n".join(lines)
 
 

@@ -39,7 +39,7 @@ def test_reminders_empty():
 
 
 def test_reminders():
-    data = [{"title": "Buy milk", "completed": False, "due": "2026-06-08", "notes": "", "priority": 0, "list": "Shopping"}]
+    data = [{"title": "Buy milk", "done": False, "due": "2026-06-08", "notes": "", "priority": 0, "list": "Shopping"}]
     out = fmt.reminders(data)
     assert "Buy milk" in out
     assert "Shopping" in out
@@ -47,9 +47,16 @@ def test_reminders():
 
 
 def test_reminders_completed():
-    data = [{"title": "Done task", "completed": True, "due": None, "notes": "", "priority": 0, "list": "Inbox"}]
+    data = [{"title": "Done task", "done": True, "due": None, "notes": "", "priority": 0, "list": "Inbox"}]
     out = fmt.reminders(data)
     assert "[x]" in out
+
+
+def test_reminders_with_location():
+    data = [{"title": "Buy eggs", "done": False, "due": None, "notes": "", "priority": 0, "list": "Reminders",
+             "location": {"name": "Späti", "lat": 52.52, "lon": 13.4, "radius_m": 150, "trigger": "arrive"}}]
+    out = fmt.reminders(data)
+    assert "📍 Späti (arrive, 150m)" in out
 
 
 # --- contacts ---
