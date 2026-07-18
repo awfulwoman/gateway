@@ -237,6 +237,7 @@ CREATE TABLE reminders (
   list         TEXT NOT NULL DEFAULT 'Reminders',
   done         INTEGER NOT NULL DEFAULT 0,
   completed_at TEXT,
+  loc_name     TEXT,
   loc_lat      REAL,
   loc_lon      REAL,
   loc_radius_m INTEGER,

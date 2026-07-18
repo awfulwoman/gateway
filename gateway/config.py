@@ -1,5 +1,10 @@
-from pydantic import BaseModel
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Annotated
+from pydantic import BaseModel, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+
+def _split_csv(v):
+    return [t.strip() for t in v.split(",") if t.strip()] if isinstance(v, str) else v
 
 
 class IMAPConfig(BaseModel):
@@ -27,9 +32,20 @@ class OwnTracksConfig(BaseModel):
 
 
 class RemindersConfig(BaseModel):
+    # Transitional CalDAV fields — used by the current tools/reminders.py backend
+    # and the migration script; retired once the SQLite store cuts over.
     base_url: str = ""
     username: str = ""
     password: str = ""
+
+    db_path: str = ""
+    api_tokens: Annotated[list[str], NoDecode] = []
+    nominatim_url: str = ""
+
+    @field_validator("api_tokens", mode="before")
+    @classmethod
+    def _split_tokens(cls, v):
+        return _split_csv(v)
 
 
 class ServerConfig(BaseModel):

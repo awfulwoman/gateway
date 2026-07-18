@@ -61,16 +61,24 @@ Thin sync `httpx` client over local Nominatim (`config.nominatim_url`). Mirror
 - Send a `User-Agent` header (Nominatim requires one). 10s timeout; on network
   error return `None` (caller decides 400 vs skip).
 
-## Part 3 — Config (`gateway/config.py`, `.env.example`)
+## Part 3 — Config (`gateway/config.py`, `.env.example`) — done
 
-Replace `RemindersConfig`:
+Extend `RemindersConfig` (kept the old `base_url`/`username`/`password` CalDAV
+fields alongside the new ones — `tools/reminders.py` and its tests still read them
+until Part 6/8 retire CalDAV; don't remove them yet):
 
 ```python
+from typing import Annotated
 from pydantic import field_validator
+from pydantic_settings import NoDecode
 
 class RemindersConfig(BaseModel):
+    base_url: str = ""       # transitional CalDAV fields, retired after cutover
+    username: str = ""
+    password: str = ""
+
     db_path: str = ""
-    api_tokens: list[str] = []
+    api_tokens: Annotated[list[str], NoDecode] = []
     nominatim_url: str = ""
 
     @field_validator("api_tokens", mode="before")
@@ -79,9 +87,15 @@ class RemindersConfig(BaseModel):
         return [t.strip() for t in v.split(",") if t.strip()] if isinstance(v, str) else v
 ```
 
-**Gotcha:** without the validator, pydantic-settings tries to JSON-decode a
-`list[str]` env var and a comma string raises. The `mode="before"` split makes
-`GATEWAY_REMINDERS__API_TOKENS=a,b` work.
+**Gotcha:** a bare `mode="before"` validator is **not enough**. For fields typed
+`list[str]`, pydantic-settings' `EnvSettingsSource` tries to `json.loads()` the raw
+env string *before* any validator runs (even nested inside a plain `BaseModel`,
+reached via `env_nested_delimiter`) — a comma string like `a,b` raises
+`SettingsError`/`JSONDecodeError` at `Config()` construction, before your validator
+ever sees it. The fix is `Annotated[list[str], NoDecode]` (pydantic-settings
+≥2.x): it tells the env source to skip its own decode and hand the raw string
+straight to the validator. Verified against pydantic-settings 2.14.0 — see
+`tests/test_config.py`.
 
 `.env.example`: drop `BASE_URL/USERNAME/PASSWORD`; add `DB_PATH`, `API_TOKENS`,
 `NOMINATIM_URL` (values from the spec).

@@ -62,24 +62,32 @@ versa.
 
 ## Part 1 — Config (`gateway/config.py`, `.env.example`)
 
+The reminders plan already added a shared `_split_csv` helper to
+`gateway/config.py` for its `api_tokens` field — reuse it:
+
 ```python
+from typing import Annotated
 from pydantic import field_validator
+from pydantic_settings import NoDecode
 
 class ServerConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 4000
-    auth_tokens: list[str] = []      # GATEWAY_SERVER__AUTH_TOKENS (comma-sep)
+    auth_tokens: Annotated[list[str], NoDecode] = []   # GATEWAY_SERVER__AUTH_TOKENS (comma-sep)
 
     @field_validator("auth_tokens", mode="before")
     @classmethod
     def _split(cls, v):
-        return [t.strip() for t in v.split(",") if t.strip()] if isinstance(v, str) else v
+        return _split_csv(v)
 ```
 
-Same `mode="before"` split gotcha as reminders `api_tokens` — without it
-pydantic-settings tries to JSON-decode the `list[str]` env var and a bare
-comma-string raises. (If the reminders plan already adds a shared split helper,
-reuse it.)
+**Gotcha (same as reminders `api_tokens`):** a bare `mode="before"` validator is
+not enough — pydantic-settings' `EnvSettingsSource` tries to `json.loads()` a
+`list[str]` env var before any validator runs, so a plain comma-string raises
+`SettingsError` at `Config()` construction. `Annotated[list[str], NoDecode]` skips
+that pre-decode and lets the validator see the raw string. Verified against
+pydantic-settings 2.14.0 while implementing the reminders store
+(`tests/test_config.py`).
 
 `.env.example`: add
 `GATEWAY_SERVER__AUTH_TOKENS=laptop-mcp-token,scratch-token` with a comment that
