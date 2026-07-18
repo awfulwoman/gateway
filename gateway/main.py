@@ -5,6 +5,7 @@ import uvicorn
 from starlette.requests import ClientDisconnect
 from mcp.server.fastmcp import FastMCP
 from gateway.config import Config
+from gateway.reminders import http as reminders_http
 from gateway.tools import calendar, reminders, contacts, email, obsidian, karakeep, owntracks, issues
 
 
@@ -23,7 +24,9 @@ class _DisconnectMiddleware:
 
 
 async def _run_http(mcp: FastMCP) -> None:
-    app = _DisconnectMiddleware(mcp.streamable_http_app())
+    app = mcp.streamable_http_app()
+    app.router.routes.extend(reminders_http.routes)
+    app = _DisconnectMiddleware(app)
     cfg = uvicorn.Config(
         app,
         host=mcp.settings.host,
@@ -39,6 +42,7 @@ def create_server(config: Config) -> FastMCP:
     calendar.register(mcp)
     reminders.init(config.reminders)
     reminders.register(mcp)
+    reminders_http.init(config.reminders)
     contacts.register(mcp)
 
     email.init(config.imap)
