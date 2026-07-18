@@ -31,6 +31,20 @@ def now_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def now_after(previous: str) -> str:
+    """A timestamp strictly after `previous`: now_utc() if the wall clock has already
+    moved past it, else `previous` + 1 second. Local writers minting a fresh
+    updated_at for an edit should use this instead of bare now_utc() — two edits to
+    the same reminder within one wall-clock second would otherwise collide and the
+    second (legitimately later) one would be spuriously rejected by upsert's LWW
+    guard, which correctly treats an equal updated_at as stale."""
+    now = now_utc()
+    if now > previous:
+        return now
+    dt = datetime.strptime(previous, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    return (dt + timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def new_id() -> str:
     return str(uuid.uuid4())
 
@@ -180,7 +194,7 @@ def soft_delete(id: str, updated_at: str | None = None) -> dict:
         raise KeyError(f"no reminder with id {id!r}")
     tombstone = dict(existing)
     tombstone["deleted"] = True
-    tombstone["updated_at"] = updated_at or now_utc()
+    tombstone["updated_at"] = updated_at or now_after(existing["updated_at"])
     return upsert(tombstone)
 
 

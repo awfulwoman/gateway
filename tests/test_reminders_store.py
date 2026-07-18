@@ -196,3 +196,20 @@ def test_gc_tombstones_leaves_non_deleted_rows(db):
     removed = db.gc_tombstones(older_than_days=30)
     assert removed == 0
     assert db.get(r["id"]) is not None
+
+
+def test_now_after_bumps_a_second_when_clock_has_not_advanced(db):
+    result = store.now_after("9999-01-01T00:00:00Z")
+    assert result == "9999-01-01T00:00:01Z"
+
+
+def test_now_after_uses_wall_clock_when_it_has_advanced(db):
+    result = store.now_after("2020-01-01T00:00:00Z")
+    assert result > "2020-01-01T00:00:00Z"
+
+
+def test_soft_delete_bumps_timestamp_to_avoid_same_second_collision(db):
+    r = make(updated_at=store.now_utc())
+    db.upsert(r)
+    tombstone = db.soft_delete(r["id"])
+    assert tombstone["updated_at"] > r["updated_at"]
