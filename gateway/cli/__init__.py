@@ -1,5 +1,6 @@
 from __future__ import annotations
 import click
+from gateway.cli import client
 from gateway.cli.commands import calendar, reminders, contacts, email, obsidian, karakeep, owntracks, issues
 
 
@@ -11,11 +12,18 @@ from gateway.cli.commands import calendar, reminders, contacts, email, obsidian,
     show_default=True,
     help="Gateway server URL (or set GATEWAY_URL)",
 )
+@click.option(
+    "--token",
+    envvar="GATEWAY_TOKEN",
+    default="",
+    help="Bearer token for the gateway server (or set GATEWAY_TOKEN)",
+)
 @click.pass_context
-def main(ctx: click.Context, server: str) -> None:
+def main(ctx: click.Context, server: str, token: str) -> None:
     """gw — gateway CLI. Requires the gateway server to be running."""
     ctx.ensure_object(dict)
     ctx.obj["server"] = server
+    client.init(token)
 
 
 main.add_command(calendar.group, "calendar")

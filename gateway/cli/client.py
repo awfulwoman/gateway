@@ -2,9 +2,16 @@ from __future__ import annotations
 import json
 import httpx
 
+_token: str = ""
+
 
 class GatewayError(Exception):
     pass
+
+
+def init(token: str) -> None:
+    global _token
+    _token = token
 
 
 def call_tool(server_url: str, name: str, arguments: dict) -> list | dict:
@@ -14,20 +21,25 @@ def call_tool(server_url: str, name: str, arguments: dict) -> list | dict:
         "method": "tools/call",
         "params": {"name": name, "arguments": arguments},
     }
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
+    if _token:
+        headers["Authorization"] = f"Bearer {_token}"
     try:
         resp = httpx.post(
             server_url,
             json=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json, text/event-stream",
-            },
+            headers=headers,
             timeout=30,
         )
         resp.raise_for_status()
     except httpx.ConnectError as e:
         raise GatewayError(f"gateway server is not running (tried {server_url})") from e
     except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            raise GatewayError("unauthorized (missing or invalid token; set --token or GATEWAY_TOKEN)") from e
         raise GatewayError(f"server error: {e.response.status_code}") from e
 
     data = _parse_response(resp)

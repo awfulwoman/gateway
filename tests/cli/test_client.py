@@ -3,6 +3,7 @@ import json
 from unittest.mock import MagicMock, patch
 import httpx
 import pytest
+from gateway.cli import client
 from gateway.cli.client import GatewayError, call_tool
 
 
@@ -46,6 +47,33 @@ def test_call_tool_returns_parsed_json():
     with patch("httpx.post", return_value=_json_response(expected)):
         result = call_tool(URL, "list_calendar_events", {"period": "today"})
     assert result == expected
+
+
+def test_call_tool_sends_no_auth_header_by_default():
+    with patch("httpx.post", return_value=_json_response([])) as mock_post:
+        call_tool(URL, "list_calendar_events", {})
+    assert "Authorization" not in mock_post.call_args[1]["headers"]
+
+
+def test_call_tool_sends_bearer_header_when_token_configured(monkeypatch):
+    monkeypatch.setattr(client, "_token", "secret-token")
+    with patch("httpx.post", return_value=_json_response([])) as mock_post:
+        call_tool(URL, "list_calendar_events", {})
+    assert mock_post.call_args[1]["headers"]["Authorization"] == "Bearer secret-token"
+
+
+def test_call_tool_raises_clear_error_on_401(monkeypatch):
+    resp = MagicMock(spec=httpx.Response)
+    resp.status_code = 401
+    resp.raise_for_status = MagicMock(side_effect=httpx.HTTPStatusError("401", request=MagicMock(), response=resp))
+    with patch("httpx.post", return_value=resp):
+        with pytest.raises(GatewayError, match="unauthorized"):
+            call_tool(URL, "list_calendar_events", {})
+
+
+def test_init_sets_module_token():
+    client.init("from-init")
+    assert client._token == "from-init"
 
 
 def test_call_tool_sends_correct_jsonrpc():
