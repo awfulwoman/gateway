@@ -49,9 +49,10 @@ macOS-only `pyobjc-framework-Contacts` (via Apple's Contacts framework), which i
 excluded from the image at build time. Everything else runs the same as on macOS.
 Mount `GATEWAY_OBSIDIAN__VAULT_PATH` and `GATEWAY_REMINDERS__DB_PATH` as volumes so
 notes and reminders persist across container restarts. See
+[`docs/superpowers/specs/2026-07-19-docker-deployment-design.md`](docs/superpowers/specs/2026-07-19-docker-deployment-design.md)
+for the design and
 [`docs/superpowers/plans/2026-07-19-docker-deployment.md`](docs/superpowers/plans/2026-07-19-docker-deployment.md)
-for the full deployment plan
-(container image, Ansible role, host migration).
+for the implementation plan (container image, Ansible role, host migration).
 
 ## Google Calendar setup
 
