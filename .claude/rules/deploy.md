@@ -1,8 +1,9 @@
 # Deploying Gateway
 
-Push to `main`, then run the Ansible role on malcolm:
+Push to `main` — CI builds and pushes `ghcr.io/awfulwoman/gateway:latest`. Then run the
+Ansible role on the storage host to pull and restart the container:
 
 ```
-playbook: playbooks/hosts/apple-macmini-m4-16gb-malcolm/core.yaml
-tags: system-mcp-gateway
+playbook: playbooks/hosts/server-64gb-storage/core.yaml
+tags: composition-gateway
 ```

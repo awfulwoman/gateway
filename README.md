@@ -1,6 +1,6 @@
 # Gateway Server + CLI tools
 
-MCP server providing Claude Code access to personal services: email, Google Calendar, macOS Reminders/Contacts, an Obsidian vault, and Karakeep bookmarks.
+MCP server providing Claude Code access to personal services: email, Google Calendar, macOS Contacts, a native Reminders store, an Obsidian vault, and Karakeep bookmarks.
 
 ## Tools (41 total)
 
@@ -8,7 +8,7 @@ MCP server providing Claude Code access to personal services: email, Google Cale
 |---|---|
 | **Calendar** | `list_calendars`, `list_calendar_events`, `search_calendar_events`, `create_calendar_event`, `update_calendar_event`, `delete_calendar_event` |
 | **Reminders** | `list_reminder_lists`, `list_reminders`, `create_reminder`, `complete_reminder`, `delete_reminder`, `search_reminders` |
-| **Contacts** | `lookup_contact`, `search_contacts`, `list_contacts` |
+| **Contacts** (macOS only) | `lookup_contact`, `search_contacts`, `list_contacts` |
 | **Email** | `list_folders`, `list_emails`, `fetch_unread_emails`, `search_emails`, `fetch_email_body`, `mark_email_read` |
 | **Obsidian** | `list_notes`, `read_note`, `search_notes`, `create_note`, `update_note`, `append_to_note`, `move_note`, `delete_note` |
 | **Karakeep** | `search_bookmarks`, `get_bookmark`, `get_bookmark_content`, `create_bookmark`, `update_bookmark`, `attach_tags`, `detach_tags`, `list_tags`, `get_lists`, `create_list`, `add_to_list`, `remove_from_list` |
@@ -36,6 +36,21 @@ uv run gateway
 ```bash
 uv run gateway --transport stdio
 ```
+
+## Running in Docker
+
+```bash
+docker build -t gateway .
+docker run -d --name gateway -p 4000:4000 --env-file .env gateway
+```
+
+The **Contacts** tool group is unavailable in the container — it depends on the
+macOS-only `pyobjc-framework-Contacts` (via Apple's Contacts framework), which is
+excluded from the image at build time. Everything else runs the same as on macOS.
+Mount `GATEWAY_OBSIDIAN__VAULT_PATH` and `GATEWAY_REMINDERS__DB_PATH` as volumes so
+notes and reminders persist across container restarts. See
+[`docs/docker-deployment.md`](docs/docker-deployment.md) for the full deployment plan
+(container image, Ansible role, host migration).
 
 ## Google Calendar setup
 
