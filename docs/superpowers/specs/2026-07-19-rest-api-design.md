@@ -57,12 +57,18 @@ backend.
 ### Non-goals (v1)
 
 - No new domains beyond **Bookmarks** (Karakeep) and **Email** (IMAP) in this first
-  version. Calendar, Notes/Issues, Location follow later, same pattern.
+  version. Calendar, Notes/Issues, Location, Contacts follow later, same pattern.
 - No change to the `/v1/reminders` offline-sync protocol or its auth — it's frozen and
   documented in its own spec. (Converging it onto this API's scoped auth is a listed
   follow-up, §9.)
-- **Contacts is excluded** — it's macOS-only and absent from the Linux container
-  (`sys.platform` gate; see the docker-deployment spec). No REST surface for it.
+- **Contacts is not in v1** — but purely a scoping choice, not a technical
+  blocker: as of
+  [`2026-07-19-radicale-contacts-reminders-design.md`](2026-07-19-radicale-contacts-reminders-design.md),
+  Contacts moved off the macOS-only, read-only `pyobjc` backend onto CardDAV, gaining
+  `create_contact`/`update_contact`/`delete_contact` and working the same in the Linux
+  container as everywhere else. (Earlier drafts of this spec excluded Contacts because
+  it *couldn't* have a REST surface at the time — that's no longer true.) A resource
+  design is sketched in §6.3, ready whenever it's picked up.
 - No OAuth / user login / multi-user. One owner, static per-client tokens, exactly like
   every other Gateway secret.
 - No websockets/streaming; request/response only.
@@ -350,6 +356,39 @@ unread; else → list. `search_in ∈ {subject, from, body, all}` (default `all`
 through to the tool. `PATCH /v1/emails/{message_id}` body `{ "read": true }` maps to
 `mark_email_read` (only `read: true` is meaningful given the tool; reject others).
 
+### 6.3 Contacts (domain `contacts`, backend Radicale/CardDAV via `gateway/tools/contacts.py`)
+
+**Not in v1** (see Non-goals) — included here so it's ready to add in one pass, following
+exactly the same reuse pattern as Bookmarks/Email. The contact id is Radicale's vCard
+`UID`, returned as `id` on every contact object.
+
+| Method & path | Backing tool | Scope |
+|---|---|---|
+| `GET /v1/contacts?q=` | `search_contacts` | `contacts:read` |
+| `GET /v1/contacts?name=` | `lookup_contact` | `contacts:read` |
+| `GET /v1/contacts?limit=` *(no `q`/`name`)* | `list_contacts` | `contacts:read` |
+| `POST /v1/contacts` | `create_contact` | `contacts:write` |
+| `PATCH /v1/contacts/{id}` | `update_contact` | `contacts:write` |
+| `DELETE /v1/contacts/{id}` | `delete_contact` | `contacts:write` |
+
+`GET /v1/contacts` dispatches like `GET /v1/emails` does: `q` present → full-text search
+(name/nickname/email/phone/organisation); else `name` present → name-only lookup; else →
+alphabetical list capped by `limit`.
+
+Request bodies (arrays adapt to/from the tools' comma-separated string params, same
+principle as bookmarks' `tags`):
+
+- `POST /v1/contacts`: `{ "name": str, "nickname"?: str, "organisation"?: str,
+  "job_title"?: str, "emails"?: [str], "phones"?: [str], "urls"?: [str],
+  "birthday"?: str, "address"?: { "street", "city", "state", "postal_code", "country" } }`.
+- `PATCH /v1/contacts/{id}`: same shape, all fields optional.
+
+**Known gap, inherited from the tool layer:** `update_contact` treats an omitted/blank
+field as "leave unchanged," not "clear it" — there's no way to explicitly null out a
+field via this router either, since it's a thin adapter over the same tool. Fixing that
+means changing the tool's semantics first (e.g. a sentinel or PATCH-style explicit-null
+convention), out of scope for the router itself.
+
 ---
 
 ## 7. Discoverability
@@ -396,9 +435,9 @@ through to the tool. `PATCH /v1/emails/{message_id}` body `{ "read": true }` map
 - **Migrate the `gw` CLI to REST (wholesale).** Once the API's domain coverage ⊇ the CLI's
   surface, switch the CLI from MCP to REST in one change:
   - **Coverage gate.** The CLI has command groups for calendar, reminders, contacts,
-    email, notes, bookmarks, location, issues. All except contacts must have REST
-    endpoints first (this pulls the "More domains" item, plus the reminders/geocode port,
-    into hard prerequisites).
+    email, notes, bookmarks, location, issues. All of them — contacts included, now that
+    it has a real backend (§6.3) — must have REST endpoints first (this pulls the "More
+    domains" item, plus the reminders/geocode port, into hard prerequisites).
   - **Client rewrite.** Replace `gateway/cli/client.py`'s JSON-RPC `tools/call` +
     SSE-envelope parsing with plain REST calls (typed JSON, standard status codes). Per
     the target layering, the CLI stops touching `/mcp` entirely.
@@ -408,12 +447,6 @@ through to the tool. `PATCH /v1/emails/{message_id}` body `{ "read": true }` map
     the CLI's `--token`/env docs.
   - **No mixed state.** The switch is atomic per the decision (§2.6): the CLI is 100% MCP
     before it and 100% REST after; it is never split across transports.
-  - **Contacts caveat (open detail).** `gw contacts` has no REST target (macOS-only,
-    excluded — §1). Against the deployed Linux container it is already non-functional
-    (contacts tools aren't registered there), so the wholesale switch effectively retires
-    `gw contacts` rather than leaving a lone MCP command. Decide at migration time: drop
-    the command, or keep it as an explicitly MCP-only exception (which would violate
-    "never mixed" — dropping is cleaner).
 - **`delete_bookmark`** tool + `DELETE /v1/bookmarks/{id}`.
 - Optional: rate limiting / request logging per client.
 
@@ -455,4 +488,6 @@ through to the tool. `PATCH /v1/emails/{message_id}` body `{ "read": true }` map
    upstream errors.
 5. FastAPI is mounted as the top app with MCP at `/mcp`; **the FastAPI lifespan must drive
    the MCP session manager** or `/mcp` breaks.
-6. Contacts has no REST surface (macOS-only, not in the container).
+6. Contacts has no REST surface **in v1** — a scoping choice (§2.5 only names Bookmarks
+   and Email as first domains), not a technical one; it's CardDAV-backed and
+   cross-platform now, and §6.3 has its resource design ready to implement.
