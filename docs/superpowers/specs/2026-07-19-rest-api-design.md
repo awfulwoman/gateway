@@ -176,6 +176,29 @@ calls the existing tool function (e.g. `karakeep.search_bookmarks(query, limit, 
 HTTP shape — which is inherent to offering REST. Where a tool returns `"true"`/`"false"`
 strings or comma-joined params, the router adapts to/from real JSON types (bool, arrays).
 
+### 3.2 Carried over unchanged in v1 (must not regress)
+
+This change is **additive**. Everything below keeps working exactly as it does today; the
+composition in §3.1 must preserve each one, and the test suite (§10) must prove it. If any
+of these changes, that's a bug, not part of this work.
+
+| # | Carried over | Guarantee | At risk because |
+|---|---|---|---|
+| 1 | **`/mcp`** (FastMCP streamable app + all registered tools) | Same path, same JSON-RPC behaviour, same `GATEWAY_SERVER__AUTH_TOKENS` bearer auth | It moves from top-level app to mounted sub-app (see §3.1 — lifespan + path prefix) |
+| 2 | **`gw` CLI** | Unchanged — still an MCP client of `/mcp`; no CLI code touched | Depends entirely on #1 |
+| 3 | **`/v1/reminders`** — `GET /v1/reminders`, `POST /v1/reminders/sync`, `PUT/DELETE /v1/reminders/{id}` | Byte-for-byte wire protocol: snapshot/`since` sync, LWW-on-`updated_at`, tombstones, `409` stale, error envelope | Same app whose top-level structure changes; carried as plain Starlette routes, **not** ported to FastAPI |
+| 4 | **`/v1/geocode`** — `GET /v1/geocode` | Same query params (`q`, or `lat`+`lon`) and responses | As #3 |
+| 5 | **Reminders auth** — `GATEWAY_REMINDERS__API_TOKENS`, in-handler check | Unchanged; **not** replaced by the new scoped tokens in v1 | New scoped auth is introduced alongside it (§4.4); must not accidentally start gating these routes |
+| 6 | **Tool modules** (`karakeep.py`, `email.py`, all others) | Function signatures and return shapes unchanged — the API *calls* them, never edits them | MCP + CLI depend on them; the reuse layer must adapt at the router, not by changing tools |
+| 7 | **Reminders store** (`gateway/reminders/store.py`) | Untouched | — |
+| 8 | **Existing config** — `GATEWAY_SERVER__*`, `GATEWAY_REMINDERS__*`, all tool config | Unchanged; the new `GATEWAY_API__CLIENTS` is purely additive | — |
+| 9 | **`--transport stdio`** path | Unaffected — only `_run_http` is restructured | — |
+| 10 | **Middleware behaviours** — `_DisconnectMiddleware` (swallow `ClientDisconnect`) and the `/mcp` `BearerAuthMiddleware` | Equivalent behaviour preserved in the FastAPI composition | They currently wrap the MCP Starlette app; the rewrite must re-attach them |
+| 11 | **Deployment** — container, Traefik host router, port 4000 | No infra routing change; only the new `GATEWAY_API__CLIENTS` secret is added (§8) | — |
+
+Items **1, 3, 4, 10** are the ones the composition actively puts at risk; the rest are
+"don't touch." The regression tests in §10 cover 1/2/3/4 explicitly.
+
 ---
 
 ## 4. Auth & scopes
@@ -338,11 +361,17 @@ through to the tool. `PATCH /v1/emails/{message_id}` body `{ "read": true }` map
 
 ## 9. Follow-ups (not in v1)
 
-- **Converge auth:** fold `/v1/reminders`+`/v1/geocode` into the FastAPI app and the
-  scoped-token model (`reminders:*`, `geocode:read`), retiring
-  `GATEWAY_REMINDERS__API_TOKENS`. Deferred to avoid churning the frozen reminders
-  protocol in the same change that introduces the framework. Backward-compat plan:
-  honour legacy reminders tokens as an implicit `reminders:*` client during transition.
+- **Port reminders/geocode to FastAPI + converge auth:** rewrite the existing
+  `/v1/reminders`+`/v1/geocode` handlers as FastAPI routers (they are plain Starlette
+  routes today, mounted as-is and therefore **absent from `/v1/openapi.json` and
+  `/v1/docs`** — porting them to routers is precisely what makes them appear in the
+  generated OpenAPI). At the same time, move them onto the scoped-token model
+  (`reminders:*`, `geocode:read`) and retire `GATEWAY_REMINDERS__API_TOKENS`. The
+  wire protocol (paths, request/response bodies, sync semantics) must stay
+  byte-for-byte identical — this is a framework/auth port, not a protocol change.
+  Deferred out of v1 to avoid churning the frozen reminders protocol in the same change
+  that introduces the framework. Backward-compat plan: honour legacy reminders tokens as
+  an implicit `reminders:*` client during the transition.
 - **More domains:** Calendar, Notes/Issues, Location — same router + reuse pattern.
 - **`delete_bookmark`** tool + `DELETE /v1/bookmarks/{id}`.
 - Optional: rate limiting / request logging per client.
@@ -358,12 +387,19 @@ through to the tool. `PATCH /v1/emails/{message_id}` body `{ "read": true }` map
   `karakeep._client` / `email._connection`): assert routing, request-model validation,
   the bool/array↔tool-param adaptation, response shape, and backend-error → envelope
   mapping.
+- **Carry-over regression tests** (guard §3.2), all against the **composed** app via
+  `TestClient` with lifespan enabled:
+  - `/mcp` still completes a real `tools/call` (the §3.1 lifespan + path-prefix gotcha).
+  - `/v1/reminders` (a `GET` and a `PUT`) and `/v1/geocode` still respond with their
+    existing shapes and are still gated by `GATEWAY_REMINDERS__API_TOKENS` — **not** by
+    the new scoped tokens (carry-over items #3–#5).
+  - The `/mcp` `BearerAuthMiddleware` and `_DisconnectMiddleware` behaviours survive the
+    recomposition (item #10).
 - **OpenAPI smoke test**: `GET /v1/openapi.json` is valid, includes the bearer scheme and
-  the expected paths/scopes.
-- **Composition/lifespan test**: after mounting, `/mcp` still completes a `tools/call`
-  (guards the lifespan gotcha from §3).
+  the expected new paths/scopes — and (asserting the §9 boundary) does **not** list
+  `/v1/reminders`/`/v1/geocode` in v1.
 - Existing suites (`tests/test_reminders_http.py`, `tests/test_http_auth.py`, CLI tests)
-  must stay green — this change is additive.
+  must stay green unchanged — this change is additive.
 
 ---
 
