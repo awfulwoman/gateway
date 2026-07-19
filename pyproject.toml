@@ -7,12 +7,14 @@ dependencies = [
     "mcp[cli]>=1.0",
     "pydantic-settings>=2.0",
     "pyyaml>=6.0",
-    "pyobjc-framework-EventKit>=10",
     "pyobjc-framework-Contacts>=10",
     "httpx>=0.25",
     "anyio>=4",
     "uvicorn>=0.20",
     "starlette>=0.27",
+    "google-api-python-client>=2",
+    "google-auth>=2",
+    "google-auth-oauthlib>=1",
 ]
 
 [dependency-groups]

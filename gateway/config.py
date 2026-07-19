@@ -18,6 +18,10 @@ class ObsidianConfig(BaseModel):
     vault_path: str = ""
 
 
+class GCalConfig(BaseModel):
+    token_path: str = ""
+
+
 class KarakeepConfig(BaseModel):
     base_url: str = ""
     api_key: str = ""
@@ -63,6 +67,7 @@ class Config(BaseSettings):
 
     imap: IMAPConfig = IMAPConfig()
     obsidian: ObsidianConfig = ObsidianConfig()
+    gcal: GCalConfig = GCalConfig()
     karakeep: KarakeepConfig = KarakeepConfig()
     owntracks: OwnTracksConfig = OwnTracksConfig()
     reminders: RemindersConfig = RemindersConfig()

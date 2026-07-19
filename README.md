@@ -1,6 +1,6 @@
 # Gateway Server + CLI tools
 
-MCP server providing Claude Code access to personal services: email, macOS Calendar/Reminders/Contacts, an Obsidian vault, and Karakeep bookmarks.
+MCP server providing Claude Code access to personal services: email, Google Calendar, macOS Reminders/Contacts, an Obsidian vault, and Karakeep bookmarks.
 
 ## Tools (41 total)
 
@@ -37,13 +37,37 @@ uv run gateway
 uv run gateway --transport stdio
 ```
 
+## Google Calendar setup
+
+Calendar events are read/written via the Google Calendar API, authenticated as you
+(OAuth), not a service account — so events you create keep you as organizer and every
+calendar your account can see is visible without sharing it separately.
+
+One-time bootstrap, on a machine with a browser:
+
+1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and
+   enable the **Google Calendar API**.
+2. Configure the OAuth consent screen (External, add yourself as a test user), then
+   **publish** it — apps left in "Testing" mode get refresh tokens that expire after 7
+   days.
+3. Create an OAuth client ID of type **Desktop app** and download the JSON as
+   `credentials.json`.
+4. Run the bootstrap script, which opens a browser for consent and writes a token file:
+   ```bash
+   uv run python -m gateway.gcal_auth credentials.json data/gcal_token.json
+   ```
+5. Set `GATEWAY_GCAL__TOKEN_PATH` to that file's path (see Configuration below).
+
+The token file is refreshed automatically at runtime; re-run the bootstrap only if it's
+revoked or expires.
+
 ## Install as a launchd service (Mac)
 
 ```bash
 ./scripts/install_service.sh
 ```
 
-This writes a launchd plist, grants TCC permissions for Calendar/Reminders/Contacts, and starts the service. It will restart automatically on reboot.
+This writes a launchd plist, grants TCC permissions for Reminders/Contacts, and starts the service. It will restart automatically on reboot.
 
 To remove:
 ```bash
@@ -98,6 +122,7 @@ All config via environment variables (or `.env` file):
 | `GATEWAY_IMAP__USERNAME` | IMAP username |
 | `GATEWAY_IMAP__PASSWORD` | IMAP password |
 | `GATEWAY_OBSIDIAN__VAULT_PATH` | Absolute path to Obsidian vault |
+| `GATEWAY_GCAL__TOKEN_PATH` | Path to the Google Calendar OAuth token file (see Google Calendar setup above) |
 | `GATEWAY_KARAKEEP__BASE_URL` | Karakeep instance URL |
 | `GATEWAY_KARAKEEP__API_KEY` | Karakeep API key |
 | `GATEWAY_SERVER__HOST` | SSE server bind address (default 127.0.0.1) |

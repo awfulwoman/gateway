@@ -1,52 +1,73 @@
 from __future__ import annotations
 import json
-import threading
 from datetime import datetime, timedelta, timezone
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from gateway.config import GCalConfig
 
-_ek_store = None
+SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
-
-def _get_store():
-    global _ek_store
-    if _ek_store is not None:
-        return _ek_store
-    import EventKit
-
-    store = EventKit.EKEventStore.alloc().init()
-    done = threading.Event()
-
-    def cb(granted, error):
-        done.set()
-
-    try:
-        store.requestFullAccessToEventsWithCompletion_(cb)
-    except AttributeError:
-        store.requestAccessToEntityType_completion_(EventKit.EKEntityTypeEvent, cb)
-
-    done.wait(timeout=10)
-    _ek_store = store
-    return store
+_config: GCalConfig | None = None
+_service = None
 
 
-def _ns_date(iso: str):
-    import Foundation
+def init(config: GCalConfig) -> None:
+    global _config
+    _config = config
+
+
+def _get_service():
+    global _service
+    if _service is not None:
+        return _service
+    assert _config and _config.token_path, "Google Calendar not configured (GATEWAY_GCAL__TOKEN_PATH required)"
+
+    creds = Credentials.from_authorized_user_file(_config.token_path, SCOPES)
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+        try:
+            with open(_config.token_path, "w") as f:
+                f.write(creds.to_json())
+        except OSError:
+            pass
+
+    _service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+    return _service
+
+
+def _encode_id(calendar_id: str, event_id: str) -> str:
+    return f"{calendar_id}::{event_id}"
+
+
+def _split_id(event_id: str) -> tuple[str, str]:
+    if "::" in event_id:
+        cal_id, ev_id = event_id.split("::", 1)
+        return cal_id, ev_id
+    return "primary", event_id
+
+
+def _ns_date(iso: str) -> str:
     dt = datetime.fromisoformat(iso)
     if not dt.tzinfo:
         dt = dt.astimezone()
-    return Foundation.NSDate.dateWithTimeIntervalSince1970_(dt.timestamp())
+    return dt.isoformat()
 
 
-def _event_to_dict(ev) -> dict:
+def _event_to_dict(ev: dict, cal_summary: str) -> dict:
+    start = ev.get("start", {})
+    end = ev.get("end", {})
     return {
-        "event_id": str(ev.eventIdentifier() or ""),
-        "title": str(ev.title() or ""),
-        "start": str(ev.startDate()),
-        "end": str(ev.endDate()),
-        "all_day": bool(ev.isAllDay()),
-        "location": str(ev.location() or ""),
-        "notes": str(ev.notes() or ""),
-        "calendar": str(ev.calendar().title() or ""),
-        "url": str(ev.URL() or ""),
+        "event_id": _encode_id(ev.get("_calendar_id", ""), ev.get("id", "")),
+        "title": ev.get("summary", ""),
+        "start": start.get("dateTime") or start.get("date", ""),
+        "end": end.get("dateTime") or end.get("date", ""),
+        "all_day": "date" in start,
+        "location": ev.get("location", ""),
+        "notes": ev.get("description", ""),
+        "calendar": cal_summary,
+        "url": ev.get("htmlLink", ""),
     }
 
 
@@ -78,56 +99,74 @@ def _parse_period(period: str) -> tuple[datetime, datetime]:
     raise ValueError(f"Unknown period: {period!r}. Use 'today', 'tomorrow', 'week', 'month', or 'YYYY-MM-DD:YYYY-MM-DD'.")
 
 
+def _list_calendars(service) -> list[dict]:
+    result = service.calendarList().list().execute()
+    return result.get("items", [])
+
+
+def _resolve_calendar_id(service, calendar_name: str) -> str:
+    if not calendar_name:
+        return "primary"
+    for cal in _list_calendars(service):
+        if cal.get("summary", "").lower() == calendar_name.lower():
+            return cal["id"]
+    return "primary"
+
+
 def list_calendars() -> str:
     """List all available calendars with their names and identifiers."""
-    import EventKit
-    store = _get_store()
-    cals = store.calendarsForEntityType_(EventKit.EKEntityTypeEvent)
+    service = _get_service()
     results = [
-        {"name": str(c.title()), "id": str(c.calendarIdentifier()), "color": str(c.color())}
-        for c in (cals or [])
+        {"name": c.get("summary", ""), "id": c.get("id", ""), "color": c.get("backgroundColor", "")}
+        for c in _list_calendars(service)
     ]
     return json.dumps(results)
 
 
 def list_calendar_events(period: str) -> str:
     """List calendar events for a time period. period can be: 'today', 'tomorrow', 'week' (next 7 days), 'month' (next 30 days), or a custom range as 'YYYY-MM-DD:YYYY-MM-DD'."""
-    import EventKit
-    import Foundation
-    store = _get_store()
-
+    service = _get_service()
     start, end = _parse_period(period)
-    ns_start = Foundation.NSDate.dateWithTimeIntervalSince1970_(start.timestamp())
-    ns_end = Foundation.NSDate.dateWithTimeIntervalSince1970_(end.timestamp())
-    calendars = store.calendarsForEntityType_(EventKit.EKEntityTypeEvent)
-    pred = store.predicateForEventsWithStartDate_endDate_calendars_(ns_start, ns_end, calendars)
-    events = store.eventsMatchingPredicate_(pred)
 
-    results = sorted([_event_to_dict(ev) for ev in (events or [])], key=lambda e: e["start"])
+    results = []
+    for cal in _list_calendars(service):
+        cal_id, cal_summary = cal["id"], cal.get("summary", "")
+        resp = service.events().list(
+            calendarId=cal_id,
+            timeMin=start.isoformat(),
+            timeMax=end.isoformat(),
+            singleEvents=True,
+            orderBy="startTime",
+        ).execute()
+        for ev in resp.get("items", []):
+            ev["_calendar_id"] = cal_id
+            results.append(_event_to_dict(ev, cal_summary))
+
+    results.sort(key=lambda e: e["start"])
     return json.dumps(results)
 
 
 def search_calendar_events(query: str, days_ahead: int = 90) -> str:
     """Search calendar events by title, location, or notes. Searches forward from today up to days_ahead days (default 90)."""
-    import EventKit
-    import Foundation
-    store = _get_store()
-
+    service = _get_service()
     now = datetime.now(timezone.utc)
     end = now + timedelta(days=days_ahead)
-    ns_start = Foundation.NSDate.dateWithTimeIntervalSince1970_(now.timestamp())
-    ns_end = Foundation.NSDate.dateWithTimeIntervalSince1970_(end.timestamp())
-    calendars = store.calendarsForEntityType_(EventKit.EKEntityTypeEvent)
-    pred = store.predicateForEventsWithStartDate_endDate_calendars_(ns_start, ns_end, calendars)
-    events = store.eventsMatchingPredicate_(pred)
 
-    q = query.lower()
-    results = [
-        _event_to_dict(ev) for ev in (events or [])
-        if q in str(ev.title() or "").lower()
-        or q in str(ev.location() or "").lower()
-        or q in str(ev.notes() or "").lower()
-    ]
+    results = []
+    for cal in _list_calendars(service):
+        cal_id, cal_summary = cal["id"], cal.get("summary", "")
+        resp = service.events().list(
+            calendarId=cal_id,
+            timeMin=now.isoformat(),
+            timeMax=end.isoformat(),
+            q=query,
+            singleEvents=True,
+            orderBy="startTime",
+        ).execute()
+        for ev in resp.get("items", []):
+            ev["_calendar_id"] = cal_id
+            results.append(_event_to_dict(ev, cal_summary))
+
     return json.dumps(results)
 
 
@@ -140,31 +179,25 @@ def create_calendar_event(
     calendar_name: str = "",
 ) -> str:
     """Create a calendar event. Dates in ISO 8601 format (e.g. 2026-04-10T14:00:00). calendar_name is optional and defaults to the system default calendar."""
-    import EventKit
-    store = _get_store()
+    service = _get_service()
+    cal_id = _resolve_calendar_id(service, calendar_name)
 
-    event = EventKit.EKEvent.eventWithEventStore_(store)
-    event.setTitle_(title)
-    event.setStartDate_(_ns_date(start_iso))
-    event.setEndDate_(_ns_date(end_iso))
+    body: dict = {
+        "summary": title,
+        "start": {"dateTime": _ns_date(start_iso)},
+        "end": {"dateTime": _ns_date(end_iso)},
+    }
     if location:
-        event.setLocation_(location)
+        body["location"] = location
     if notes:
-        event.setNotes_(notes)
+        body["description"] = notes
 
-    cal = None
-    if calendar_name:
-        cals = store.calendarsForEntityType_(EventKit.EKEntityTypeEvent)
-        for c in (cals or []):
-            if str(c.title()).lower() == calendar_name.lower():
-                cal = c
-                break
-    event.setCalendar_(cal or store.defaultCalendarForNewEvents())
+    try:
+        service.events().insert(calendarId=cal_id, body=body).execute()
+    except HttpError as e:
+        return json.dumps({"status": "error", "message": f"Failed to create event: {title} ({e})"})
 
-    ok = store.saveEvent_span_commit_error_(event, EventKit.EKSpanThisEvent, True, None)
-    if ok:
-        return json.dumps({"status": "created", "title": title, "start": start_iso, "end": end_iso})
-    return json.dumps({"status": "error", "message": f"Failed to create event: {title}"})
+    return json.dumps({"status": "created", "title": title, "start": start_iso, "end": end_iso})
 
 
 def update_calendar_event(
@@ -176,41 +209,44 @@ def update_calendar_event(
     notes: str = "",
 ) -> str:
     """Update fields on an existing calendar event by event_id. Only supplied (non-empty) fields are changed."""
-    import EventKit
-    store = _get_store()
+    service = _get_service()
+    cal_id, ev_id = _split_id(event_id)
 
-    event = store.eventWithIdentifier_(event_id)
-    if event is None:
-        return json.dumps({"status": "error", "message": f"Event not found: {event_id}"})
+    body: dict = {}
     if title:
-        event.setTitle_(title)
+        body["summary"] = title
     if start_iso:
-        event.setStartDate_(_ns_date(start_iso))
+        body["start"] = {"dateTime": _ns_date(start_iso)}
     if end_iso:
-        event.setEndDate_(_ns_date(end_iso))
+        body["end"] = {"dateTime": _ns_date(end_iso)}
     if location:
-        event.setLocation_(location)
+        body["location"] = location
     if notes:
-        event.setNotes_(notes)
+        body["description"] = notes
 
-    ok = store.saveEvent_span_commit_error_(event, EventKit.EKSpanThisEvent, True, None)
-    if ok:
-        return json.dumps({"status": "updated", "event_id": event_id})
-    return json.dumps({"status": "error", "message": "Failed to update event"})
+    try:
+        service.events().patch(calendarId=cal_id, eventId=ev_id, body=body).execute()
+    except HttpError as e:
+        if e.resp.status == 404:
+            return json.dumps({"status": "error", "message": f"Event not found: {event_id}"})
+        return json.dumps({"status": "error", "message": f"Failed to update event: {e}"})
+
+    return json.dumps({"status": "updated", "event_id": event_id})
 
 
 def delete_calendar_event(event_id: str) -> str:
     """Delete a calendar event by its event_id (obtained from list_calendar_events or search_calendar_events)."""
-    import EventKit
-    store = _get_store()
+    service = _get_service()
+    cal_id, ev_id = _split_id(event_id)
 
-    event = store.eventWithIdentifier_(event_id)
-    if event is None:
-        return json.dumps({"status": "error", "message": f"Event not found: {event_id}"})
-    ok = store.removeEvent_span_commit_error_(event, EventKit.EKSpanThisEvent, True, None)
-    if ok:
-        return json.dumps({"status": "deleted", "event_id": event_id})
-    return json.dumps({"status": "error", "message": "Failed to delete event"})
+    try:
+        service.events().delete(calendarId=cal_id, eventId=ev_id).execute()
+    except HttpError as e:
+        if e.resp.status == 404:
+            return json.dumps({"status": "error", "message": f"Event not found: {event_id}"})
+        return json.dumps({"status": "error", "message": f"Failed to delete event: {e}"})
+
+    return json.dumps({"status": "deleted", "event_id": event_id})
 
 
 def register(mcp) -> None:
