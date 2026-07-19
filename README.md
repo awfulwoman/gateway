@@ -50,11 +50,11 @@ One-time bootstrap, on a machine with a browser:
 2. Configure the OAuth consent screen (External, add yourself as a test user), then
    **publish** it — apps left in "Testing" mode get refresh tokens that expire after 7
    days.
-3. Create an OAuth client ID of type **Desktop app** and download the JSON as
-   `credentials.json`.
+3. Create an OAuth client ID of type **Desktop app** and copy its **client ID** and
+   **client secret** from the credentials page (no need to download the JSON file).
 4. Run the bootstrap script, which opens a browser for consent and writes a token file:
    ```bash
-   uv run python -m gateway.gcal_auth credentials.json data/gcal_token.json
+   uv run python -m gateway.gcal_auth <client-id> <client-secret> data/gcal_token.json
    ```
 5. Set `GATEWAY_GCAL__TOKEN_PATH` to that file's path (see Configuration below).
 

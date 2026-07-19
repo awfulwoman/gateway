@@ -2,7 +2,11 @@
 
 Run on a machine with a browser (not the headless server):
 
-    python -m gateway.gcal_auth <credentials.json> <token.json>
+    python -m gateway.gcal_auth <client_id> <client_secret> <token.json>
+
+client_id/client_secret come from the OAuth "Desktop app" client in Google
+Cloud Console — no need to download the credentials.json file, just copy the
+two values shown on the credentials page.
 
 Produces a token.json containing a refresh token; deploy that file and point
 GATEWAY_GCAL__TOKEN_PATH at it. See docs/superpowers/specs/2026-07-19-calendar-google-migration.md.
@@ -14,13 +18,25 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 
+def _client_config(client_id: str, client_secret: str) -> dict:
+    return {
+        "installed": {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": ["http://localhost"],
+        }
+    }
+
+
 def main() -> None:
-    if len(sys.argv) != 3:
-        print("Usage: python -m gateway.gcal_auth <credentials.json> <token.json>", file=sys.stderr)
+    if len(sys.argv) != 4:
+        print("Usage: python -m gateway.gcal_auth <client_id> <client_secret> <token.json>", file=sys.stderr)
         sys.exit(1)
 
-    credentials_path, token_path = sys.argv[1], sys.argv[2]
-    flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
+    client_id, client_secret, token_path = sys.argv[1], sys.argv[2], sys.argv[3]
+    flow = InstalledAppFlow.from_client_config(_client_config(client_id, client_secret), SCOPES)
     creds = flow.run_local_server(port=0)
 
     with open(token_path, "w") as f:
