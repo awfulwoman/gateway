@@ -48,7 +48,7 @@ PLIST
 
 mkdir -p "${REPO_DIR}/logs"
 
-# Grant TCC permissions for Reminders and Contacts.
+# Grant TCC permission for Contacts.
 # Must use the real path to uv (not a symlink) as TCC matches on the versioned path.
 UV_REAL="$(python3 -c "import os; print(os.path.realpath('$UV_PATH'))")"
 TCC_DB="$HOME/Library/Application Support/com.apple.TCC/TCC.db"
@@ -57,20 +57,12 @@ sqlite3 "$TCC_DB" "
 INSERT OR REPLACE INTO access
   (service, client, client_type, auth_value, auth_reason, auth_version, csreq, indirect_object_identifier)
 VALUES
-  ('kTCCServiceReminders', 'org.python.python', 0, 2, 3, 1, NULL, 'UNUSED');
-INSERT OR REPLACE INTO access
-  (service, client, client_type, auth_value, auth_reason, auth_version, csreq, indirect_object_identifier)
-VALUES
-  ('kTCCServiceReminders', '$UV_REAL', 1, 2, 3, 1, NULL, 'UNUSED');
-INSERT OR REPLACE INTO access
-  (service, client, client_type, auth_value, auth_reason, auth_version, csreq, indirect_object_identifier)
-VALUES
   ('kTCCServiceAddressBook', 'org.python.python', 0, 2, 3, 1, NULL, 'UNUSED');
 INSERT OR REPLACE INTO access
   (service, client, client_type, auth_value, auth_reason, auth_version, csreq, indirect_object_identifier)
 VALUES
   ('kTCCServiceAddressBook', '$UV_REAL', 1, 2, 3, 1, NULL, 'UNUSED');
-" && echo "Reminders and Contacts TCC permissions granted."
+" && echo "Contacts TCC permission granted."
 
 launchctl bootstrap gui/$(id -u) "$PLIST_PATH" 2>/dev/null || launchctl load "$PLIST_PATH"
 echo "Gateway service installed and started."

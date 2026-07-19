@@ -68,7 +68,7 @@ token; re-run the bootstrap only if it's revoked or expires.
 ./scripts/install_service.sh
 ```
 
-This writes a launchd plist, grants TCC permissions for Reminders/Contacts, and starts the service. It will restart automatically on reboot.
+This writes a launchd plist, grants TCC permission for Contacts, and starts the service. It will restart automatically on reboot.
 
 To remove:
 ```bash
