@@ -3,7 +3,6 @@ import json
 from datetime import datetime, timedelta, timezone
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from gateway.config import GCalConfig
 
@@ -22,17 +21,9 @@ def _get_service():
     global _service
     if _service is not None:
         return _service
-    assert _config and _config.token_path, "Google Calendar not configured (GATEWAY_GCAL__TOKEN_PATH required)"
+    assert _config and _config.token_json, "Google Calendar not configured (GATEWAY_GCAL__TOKEN_JSON required)"
 
-    creds = Credentials.from_authorized_user_file(_config.token_path, SCOPES)
-    if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        try:
-            with open(_config.token_path, "w") as f:
-                f.write(creds.to_json())
-        except OSError:
-            pass
-
+    creds = Credentials.from_authorized_user_info(json.loads(_config.token_json), SCOPES)
     _service = build("calendar", "v3", credentials=creds, cache_discovery=False)
     return _service
 

@@ -52,14 +52,15 @@ One-time bootstrap, on a machine with a browser:
    days.
 3. Create an OAuth client ID of type **Desktop app** and copy its **client ID** and
    **client secret** from the credentials page (no need to download the JSON file).
-4. Run the bootstrap script, which opens a browser for consent and writes a token file:
+4. Run the bootstrap script, which opens a browser for consent and prints the
+   resulting credentials as JSON:
    ```bash
-   uv run python -m gateway.gcal_auth <client-id> <client-secret> data/gcal_token.json
+   uv run python -m gateway.gcal_auth <client-id> <client-secret>
    ```
-5. Set `GATEWAY_GCAL__TOKEN_PATH` to that file's path (see Configuration below).
+5. Set `GATEWAY_GCAL__TOKEN_JSON` to that JSON output (see Configuration below).
 
-The token file is refreshed automatically at runtime; re-run the bootstrap only if it's
-revoked or expires.
+The access token is refreshed automatically at runtime from the embedded refresh
+token; re-run the bootstrap only if it's revoked or expires.
 
 ## Install as a launchd service (Mac)
 
@@ -122,7 +123,7 @@ All config via environment variables (or `.env` file):
 | `GATEWAY_IMAP__USERNAME` | IMAP username |
 | `GATEWAY_IMAP__PASSWORD` | IMAP password |
 | `GATEWAY_OBSIDIAN__VAULT_PATH` | Absolute path to Obsidian vault |
-| `GATEWAY_GCAL__TOKEN_PATH` | Path to the Google Calendar OAuth token file (see Google Calendar setup above) |
+| `GATEWAY_GCAL__TOKEN_JSON` | Google Calendar OAuth credentials, as JSON (see Google Calendar setup above) |
 | `GATEWAY_KARAKEEP__BASE_URL` | Karakeep instance URL |
 | `GATEWAY_KARAKEEP__API_KEY` | Karakeep API key |
 | `GATEWAY_SERVER__HOST` | SSE server bind address (default 127.0.0.1) |

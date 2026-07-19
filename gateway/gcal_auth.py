@@ -2,14 +2,19 @@
 
 Run on a machine with a browser (not the headless server):
 
-    python -m gateway.gcal_auth <client_id> <client_secret> <token.json>
+    python -m gateway.gcal_auth <client_id> <client_secret>
 
 client_id/client_secret come from the OAuth "Desktop app" client in Google
 Cloud Console — no need to download the credentials.json file, just copy the
 two values shown on the credentials page.
 
-Produces a token.json containing a refresh token; deploy that file and point
-GATEWAY_GCAL__TOKEN_PATH at it. See docs/superpowers/specs/2026-07-19-calendar-google-migration.md.
+Prints the resulting credentials as a single-line JSON blob on stdout. Set
+that as GATEWAY_GCAL__TOKEN_JSON, e.g.:
+
+    python -m gateway.gcal_auth <client_id> <client_secret> \\
+      | ansible-vault encrypt_string --stdin-name vault_gateway_gcal_token_json
+
+See docs/superpowers/specs/2026-07-19-calendar-google-migration.md.
 """
 from __future__ import annotations
 import sys
@@ -31,18 +36,15 @@ def _client_config(client_id: str, client_secret: str) -> dict:
 
 
 def main() -> None:
-    if len(sys.argv) != 4:
-        print("Usage: python -m gateway.gcal_auth <client_id> <client_secret> <token.json>", file=sys.stderr)
+    if len(sys.argv) != 3:
+        print("Usage: python -m gateway.gcal_auth <client_id> <client_secret>", file=sys.stderr)
         sys.exit(1)
 
-    client_id, client_secret, token_path = sys.argv[1], sys.argv[2], sys.argv[3]
+    client_id, client_secret = sys.argv[1], sys.argv[2]
     flow = InstalledAppFlow.from_client_config(_client_config(client_id, client_secret), SCOPES)
     creds = flow.run_local_server(port=0)
 
-    with open(token_path, "w") as f:
-        f.write(creds.to_json())
-
-    print(f"Wrote {token_path}")
+    print(creds.to_json())
 
 
 if __name__ == "__main__":

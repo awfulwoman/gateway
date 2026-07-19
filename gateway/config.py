@@ -19,7 +19,7 @@ class ObsidianConfig(BaseModel):
 
 
 class GCalConfig(BaseModel):
-    token_path: str = ""
+    token_json: str = ""
 
 
 class KarakeepConfig(BaseModel):
