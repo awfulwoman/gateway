@@ -1,7 +1,6 @@
 from __future__ import annotations
 import argparse
 import logging
-import sys
 import anyio
 import uvicorn
 from starlette.requests import ClientDisconnect
@@ -9,7 +8,7 @@ from mcp.server.fastmcp import FastMCP
 from gateway.config import Config
 from gateway.http_auth import BearerAuthMiddleware
 from gateway.reminders import http as reminders_http
-from gateway.tools import calendar, reminders, email, obsidian, karakeep, owntracks, issues
+from gateway.tools import calendar, contacts, reminders, email, obsidian, karakeep, owntracks, issues
 
 logger = logging.getLogger("gateway")
 
@@ -49,13 +48,12 @@ def create_server(config: Config) -> FastMCP:
 
     calendar.init(config.gcal)
     calendar.register(mcp)
-    reminders.init(config.reminders)
+    reminders.init(config.reminders, config.radicale)
     reminders.register(mcp)
     reminders_http.init(config.reminders)
 
-    if sys.platform == "darwin":
-        from gateway.tools import contacts
-        contacts.register(mcp)
+    contacts.init(config.radicale)
+    contacts.register(mcp)
 
     email.init(config.imap)
     email.register(mcp)

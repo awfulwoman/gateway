@@ -1,11 +1,11 @@
 from __future__ import annotations
 import json
-from gateway.config import RemindersConfig
+from gateway.config import RadicaleConfig, RemindersConfig
 from gateway.reminders import geocode, store
 
 
-def init(config: RemindersConfig) -> None:
-    store.init(config)
+def init(config: RemindersConfig, radicale_config: RadicaleConfig) -> None:
+    store.init(radicale_config)
     geocode.init(config)
 
 

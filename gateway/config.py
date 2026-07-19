@@ -36,7 +36,6 @@ class OwnTracksConfig(BaseModel):
 
 
 class RemindersConfig(BaseModel):
-    db_path: str = ""
     api_tokens: Annotated[list[str], NoDecode] = []
     nominatim_url: str = ""
 
@@ -44,6 +43,14 @@ class RemindersConfig(BaseModel):
     @classmethod
     def _split_tokens(cls, v):
         return _split_csv(v)
+
+
+class RadicaleConfig(BaseModel):
+    base_url: str = ""
+    username: str = ""
+    password: str = ""
+    contacts_path: str = ""
+    default_list: str = "Reminders"
 
 
 class ServerConfig(BaseModel):
@@ -71,4 +78,5 @@ class Config(BaseSettings):
     karakeep: KarakeepConfig = KarakeepConfig()
     owntracks: OwnTracksConfig = OwnTracksConfig()
     reminders: RemindersConfig = RemindersConfig()
+    radicale: RadicaleConfig = RadicaleConfig()
     server: ServerConfig = ServerConfig()

@@ -1,18 +1,24 @@
 from __future__ import annotations
 import json
-import sqlite3
+import re
 import uuid
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from gateway.config import RemindersConfig
+from datetime import date, datetime, timedelta, timezone
+import caldav
+from icalendar import Alarm, Todo as ICalTodo, vUri
+from icalendar.cal import Component
+from gateway.config import RadicaleConfig
 
-_config: RemindersConfig | None = None
-_conn_cache: sqlite3.Connection | None = None
+_config: RadicaleConfig | None = None
+_client_cache: caldav.DAVClient | None = None
 
 _KNOWN_KEYS = {
     "id", "title", "notes", "due", "priority", "list", "done", "completed_at",
     "location", "created_at", "updated_at", "deleted",
 }
+
+# RFC 9074 requires a TRIGGER on a proximity VALARM even though it's ignored.
+_PROXIMITY_TRIGGER_DUMMY = datetime(1976, 4, 1, 0, 55, 45, tzinfo=timezone.utc)
+_GEO_RE = re.compile(r"^geo:(-?[\d.]+),(-?[\d.]+)(?:;u=(\d+))?$")
 
 
 class Stale(Exception):
@@ -21,10 +27,10 @@ class Stale(Exception):
         self.current = current
 
 
-def init(config: RemindersConfig) -> None:
-    global _config, _conn_cache
+def init(config: RadicaleConfig) -> None:
+    global _config, _client_cache
     _config = config
-    _conn_cache = None
+    _client_cache = None
 
 
 def now_utc() -> str:
@@ -49,118 +55,173 @@ def new_id() -> str:
     return str(uuid.uuid4())
 
 
-def _conn() -> sqlite3.Connection:
-    global _conn_cache
-    if _conn_cache is None:
-        assert _config and _config.db_path, "Reminders store not configured (GATEWAY_REMINDERS__DB_PATH required)"
-        path = Path(_config.db_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(path), check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA busy_timeout=5000")
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS reminders (
-              id           TEXT PRIMARY KEY,
-              title        TEXT NOT NULL,
-              notes        TEXT,
-              due          TEXT,
-              priority     INTEGER NOT NULL DEFAULT 0,
-              list         TEXT NOT NULL DEFAULT 'Reminders',
-              done         INTEGER NOT NULL DEFAULT 0,
-              completed_at TEXT,
-              loc_name     TEXT,
-              loc_lat      REAL,
-              loc_lon      REAL,
-              loc_radius_m INTEGER,
-              loc_trigger  TEXT,
-              created_at   TEXT NOT NULL,
-              updated_at   TEXT NOT NULL,
-              deleted      INTEGER NOT NULL DEFAULT 0,
-              extra        TEXT
-            )
-            """
+def _client() -> caldav.DAVClient:
+    global _client_cache
+    if _client_cache is None:
+        assert _config and _config.base_url, "Radicale not configured (GATEWAY_RADICALE__BASE_URL required)"
+        _client_cache = caldav.DAVClient(
+            url=_config.base_url,
+            username=_config.username,
+            password=_config.password,
         )
-        conn.execute("CREATE INDEX IF NOT EXISTS idx_reminders_updated_at ON reminders(updated_at)")
-        conn.commit()
-        _conn_cache = conn
-    return _conn_cache
+    return _client_cache
 
 
-def _row_to_dict(row: sqlite3.Row) -> dict:
-    d: dict = {
-        "id": row["id"],
-        "title": row["title"],
-        "notes": row["notes"],
-        "due": row["due"],
-        "priority": row["priority"],
-        "list": row["list"],
-        "done": bool(row["done"]),
-        "completed_at": row["completed_at"],
-        "created_at": row["created_at"],
-        "updated_at": row["updated_at"],
-        "deleted": bool(row["deleted"]),
-    }
-    if row["loc_lat"] is not None:
-        d["location"] = {
-            "name": row["loc_name"],
-            "lat": row["loc_lat"],
-            "lon": row["loc_lon"],
-            "radius_m": row["loc_radius_m"],
-            "trigger": row["loc_trigger"],
+def _todo_collections() -> list[caldav.Calendar]:
+    principal = _client().principal()
+    return [c for c in principal.calendars() if "VTODO" in c.get_supported_components()]
+
+
+def _get_or_create_collection(list_name: str) -> caldav.Calendar:
+    name = list_name or (_config.default_list if _config else "Reminders")
+    for c in _todo_collections():
+        if c.get_display_name() == name:
+            return c
+    principal = _client().principal()
+    return principal.make_calendar(name=name, supported_calendar_component_set=["VTODO"])
+
+
+def _find_todo(id: str) -> caldav.Todo | None:
+    for c in _todo_collections():
+        try:
+            return c.todo_by_uid(id)
+        except caldav.error.NotFoundError:
+            continue
+    return None
+
+
+def _to_rfc3339(prop) -> str | None:
+    if prop is None:
+        return None
+    dt = prop.dt if hasattr(prop, "dt") else prop
+    if not isinstance(dt, datetime):
+        return dt.isoformat()  # a plain date: already YYYY-MM-DD
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _parse_due(value: str) -> date | datetime:
+    if len(value) == 10:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+
+
+def _parse_ts(value: str) -> datetime:
+    return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+
+
+def _parse_location(vtodo: ICalTodo) -> dict | None:
+    for alarm in vtodo.subcomponents:
+        if alarm.name != "VALARM" or "PROXIMITY" not in alarm:
+            continue
+        vloc = next((s for s in alarm.subcomponents if s.name == "VLOCATION"), None)
+        if vloc is None or "URL" not in vloc:
+            continue
+        m = _GEO_RE.match(str(vloc.get("url")))
+        if not m:
+            continue
+        return {
+            "name": str(alarm.get("description", "")),
+            "lat": float(m.group(1)),
+            "lon": float(m.group(2)),
+            "radius_m": int(m.group(3)) if m.group(3) else 150,
+            "trigger": "arrive" if str(alarm.get("proximity")).upper() == "ARRIVE" else "leave",
         }
-    else:
-        d["location"] = None
-    if row["extra"]:
-        for k, v in json.loads(row["extra"]).items():
+    return None
+
+
+def _todo_to_dict(todo: caldav.Todo) -> dict:
+    vtodo = todo.icalendar_component
+    status = str(vtodo.get("status", "NEEDS-ACTION"))
+    updated_at = vtodo.get("x-gateway-updated-at")
+    created_at = _to_rfc3339(vtodo.get("created")) or _to_rfc3339(vtodo.get("dtstamp")) or now_utc()
+
+    d: dict = {
+        "id": str(vtodo.get("uid", "")),
+        "title": str(vtodo.get("summary", "")),
+        "notes": str(vtodo.get("description")) if vtodo.get("description") is not None else None,
+        "due": _to_rfc3339(vtodo.get("due")),
+        "priority": int(vtodo.get("priority") or 0),
+        "list": todo.parent.get_display_name() if todo.parent else (_config.default_list if _config else "Reminders"),
+        "done": status == "COMPLETED",
+        "completed_at": _to_rfc3339(vtodo.get("completed")),
+        "created_at": created_at,
+        "updated_at": str(updated_at) if updated_at is not None else created_at,
+        "deleted": status == "CANCELLED",
+        "location": _parse_location(vtodo),
+    }
+
+    extra_prop = vtodo.get("x-gateway-extra")
+    if extra_prop:
+        for k, v in json.loads(str(extra_prop)).items():
             d.setdefault(k, v)
     return d
 
 
-def _dict_to_params(d: dict) -> dict:
-    loc = d.get("location") or {}
-    extra = {k: v for k, v in d.items() if k not in _KNOWN_KEYS}
-    return {
-        "id": d["id"],
-        "title": d["title"],
-        "notes": d.get("notes"),
-        "due": d.get("due"),
-        "priority": d.get("priority") or 0,
-        "list": d.get("list") or "Reminders",
-        "done": 1 if d.get("done") else 0,
-        "completed_at": d.get("completed_at"),
-        "loc_name": loc.get("name"),
-        "loc_lat": loc.get("lat"),
-        "loc_lon": loc.get("lon"),
-        "loc_radius_m": loc.get("radius_m"),
-        "loc_trigger": loc.get("trigger"),
-        "created_at": d["created_at"],
-        "updated_at": d["updated_at"],
-        "deleted": 1 if d.get("deleted") else 0,
-        "extra": json.dumps(extra) if extra else None,
-    }
+def _build_ical(reminder: dict) -> str:
+    if not (reminder.get("title") or "").strip():
+        raise ValueError("title is required and must be non-empty")
+    loc = reminder.get("location")
+    if loc is not None and (loc.get("lat") is None or loc.get("lon") is None):
+        raise ValueError("location requires lat and lon")
+
+    vtodo = ICalTodo()
+    vtodo.add("uid", reminder["id"])
+    vtodo.add("summary", reminder["title"])
+    if reminder.get("notes"):
+        vtodo.add("description", reminder["notes"])
+    if reminder.get("due"):
+        vtodo.add("due", _parse_due(reminder["due"]))
+    vtodo.add("priority", reminder.get("priority") or 0)
+    vtodo.add("status", "CANCELLED" if reminder.get("deleted") else ("COMPLETED" if reminder.get("done") else "NEEDS-ACTION"))
+    if reminder.get("completed_at"):
+        vtodo.add("completed", _parse_ts(reminder["completed_at"]))
+    vtodo.add("created", _parse_ts(reminder.get("created_at") or reminder["updated_at"]))
+    vtodo.add("dtstamp", datetime.now(timezone.utc))
+    vtodo["X-GATEWAY-UPDATED-AT"] = reminder["updated_at"]
+
+    if loc is not None:
+        alarm = Alarm()
+        alarm.add("action", "DISPLAY")
+        alarm.add("description", loc.get("name") or reminder["title"])
+        alarm.add("trigger", _PROXIMITY_TRIGGER_DUMMY, parameters={"VALUE": "DATE-TIME"})
+        alarm["PROXIMITY"] = "ARRIVE" if loc.get("trigger", "arrive") == "arrive" else "DEPART"
+        vloc = Component()
+        vloc.name = "VLOCATION"
+        vloc.add("url", vUri(f"geo:{loc['lat']},{loc['lon']};u={loc.get('radius_m', 150)}"))
+        alarm.add_component(vloc)
+        vtodo.add_component(alarm)
+
+    extra = {k: v for k, v in reminder.items() if k not in _KNOWN_KEYS}
+    if extra:
+        vtodo["X-GATEWAY-EXTRA"] = json.dumps(extra)
+
+    return vtodo.to_ical().decode("utf-8")
 
 
 def get(id: str) -> dict | None:
-    row = _conn().execute("SELECT * FROM reminders WHERE id = ?", (id,)).fetchone()
-    return _row_to_dict(row) if row else None
+    todo = _find_todo(id)
+    return _todo_to_dict(todo) if todo is not None else None
 
 
 def list_reminders(since: str | None = None, include_deleted: bool = True, list_name: str | None = None) -> list[dict]:
-    query = "SELECT * FROM reminders WHERE 1=1"
-    params: list = []
-    if since:
-        query += " AND updated_at > ?"
-        params.append(since)
-    if not include_deleted:
-        query += " AND deleted = 0"
     if list_name:
-        query += " AND list = ?"
-        params.append(list_name)
-    query += " ORDER BY updated_at"
-    rows = _conn().execute(query, params).fetchall()
-    return [_row_to_dict(r) for r in rows]
+        collections = [c for c in _todo_collections() if c.get_display_name() == list_name]
+    else:
+        collections = _todo_collections()
+
+    results = []
+    for c in collections:
+        for todo in c.todos(include_completed=True):
+            results.append(_todo_to_dict(todo))
+
+    if since:
+        results = [r for r in results if r["updated_at"] > since]
+    if not include_deleted:
+        results = [r for r in results if not r["deleted"]]
+    results.sort(key=lambda r: r["updated_at"])
+    return results
 
 
 def upsert(reminder: dict) -> dict:
@@ -170,22 +231,26 @@ def upsert(reminder: dict) -> dict:
     if loc is not None and (loc.get("lat") is None or loc.get("lon") is None):
         raise ValueError("location requires lat and lon")
 
-    existing = get(reminder["id"])
+    existing_todo = _find_todo(reminder["id"])
+    existing = _todo_to_dict(existing_todo) if existing_todo is not None else None
     if existing is not None and reminder["updated_at"] <= existing["updated_at"]:
         raise Stale(existing)
 
-    params = _dict_to_params(reminder)
-    columns = list(params.keys())
-    placeholders = ", ".join(f":{c}" for c in columns)
-    updates = ", ".join(f"{c} = excluded.{c}" for c in columns if c != "id")
-    conn = _conn()
-    conn.execute(
-        f"INSERT INTO reminders ({', '.join(columns)}) VALUES ({placeholders}) "
-        f"ON CONFLICT(id) DO UPDATE SET {updates}",
-        params,
-    )
-    conn.commit()
-    return get(reminder["id"])
+    ical = _build_ical(reminder)
+    target_list = reminder.get("list") or (_config.default_list if _config else "Reminders")
+
+    if existing_todo is not None and existing["list"] == target_list:
+        existing_todo.icalendar_component = ICalTodo.from_ical(ical)
+        existing_todo.save()
+        return _todo_to_dict(existing_todo)
+
+    # New reminder, or its list changed — CalDAV has no atomic move, so re-home it:
+    # write to the target collection, then remove any prior copy elsewhere.
+    collection = _get_or_create_collection(target_list)
+    if existing_todo is not None:
+        existing_todo.delete()
+    saved = collection.add_todo(ical=ical)
+    return _todo_to_dict(saved)
 
 
 def soft_delete(id: str, updated_at: str | None = None) -> dict:
@@ -200,7 +265,11 @@ def soft_delete(id: str, updated_at: str | None = None) -> dict:
 
 def gc_tombstones(older_than_days: int = 30) -> int:
     cutoff = (datetime.now(timezone.utc) - timedelta(days=older_than_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    conn = _conn()
-    cur = conn.execute("DELETE FROM reminders WHERE deleted = 1 AND updated_at < ?", (cutoff,))
-    conn.commit()
-    return cur.rowcount
+    removed = 0
+    for c in _todo_collections():
+        for todo in c.todos(include_completed=True):
+            d = _todo_to_dict(todo)
+            if d["deleted"] and d["updated_at"] < cutoff:
+                todo.delete()
+                removed += 1
+    return removed

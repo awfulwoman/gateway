@@ -5,19 +5,18 @@ from starlette.testclient import TestClient
 import gateway.reminders.geocode as geocode
 import gateway.reminders.http as reminders_http
 import gateway.reminders.store as store
-from gateway.config import RemindersConfig
+from gateway.config import RadicaleConfig, RemindersConfig
 
 AUTH = {"Authorization": "Bearer good-token"}
 
 
 @pytest.fixture
-def client(tmp_path):
+def client(radicale_server, radicale_user):
     config = RemindersConfig(
-        db_path=str(tmp_path / "reminders.db"),
         api_tokens=["good-token"],
         nominatim_url="https://nominatim.example.com",
     )
-    store.init(config)
+    store.init(RadicaleConfig(base_url=radicale_server, username=radicale_user, password="x"))
     geocode.init(config)
     reminders_http.init(config)
     app = Starlette(routes=reminders_http.routes)

@@ -1,14 +1,14 @@
 # Gateway Server + CLI tools
 
-MCP server providing Claude Code access to personal services: email, Google Calendar, macOS Contacts, a native Reminders store, an Obsidian vault, and Karakeep bookmarks.
+MCP server providing Claude Code access to personal services: email, Google Calendar, Contacts and Reminders (backed by Radicale/CalDAV+CardDAV), an Obsidian vault, and Karakeep bookmarks.
 
-## Tools (41 total)
+## Tools (44 total)
 
 | Group | Tools |
 |---|---|
 | **Calendar** | `list_calendars`, `list_calendar_events`, `search_calendar_events`, `create_calendar_event`, `update_calendar_event`, `delete_calendar_event` |
 | **Reminders** | `list_reminder_lists`, `list_reminders`, `create_reminder`, `complete_reminder`, `delete_reminder`, `search_reminders` |
-| **Contacts** (macOS only) | `lookup_contact`, `search_contacts`, `list_contacts` |
+| **Contacts** | `lookup_contact`, `search_contacts`, `list_contacts`, `create_contact`, `update_contact`, `delete_contact` |
 | **Email** | `list_folders`, `list_emails`, `fetch_unread_emails`, `search_emails`, `fetch_email_body`, `mark_email_read` |
 | **Obsidian** | `list_notes`, `read_note`, `search_notes`, `create_note`, `update_note`, `append_to_note`, `move_note`, `delete_note` |
 | **Karakeep** | `search_bookmarks`, `get_bookmark`, `get_bookmark_content`, `create_bookmark`, `update_bookmark`, `attach_tags`, `detach_tags`, `list_tags`, `get_lists`, `create_list`, `add_to_list`, `remove_from_list` |
@@ -44,11 +44,10 @@ docker build -t gateway .
 docker run -d --name gateway -p 4000:4000 --env-file .env gateway
 ```
 
-The **Contacts** tool group is unavailable in the container — it depends on the
-macOS-only `pyobjc-framework-Contacts` (via Apple's Contacts framework), which is
-excluded from the image at build time. Everything else runs the same as on macOS.
-Mount `GATEWAY_OBSIDIAN__VAULT_PATH` and `GATEWAY_REMINDERS__DB_PATH` as volumes so
-notes and reminders persist across container restarts. See
+Contacts and Reminders are backed by Radicale (CalDAV/CardDAV), reached over HTTP via
+`GATEWAY_RADICALE__*`, so both tool groups work the same in the container as on macOS —
+no platform-specific dependency to exclude. Mount `GATEWAY_OBSIDIAN__VAULT_PATH` as a
+volume so notes persist across container restarts. See
 [`docs/superpowers/specs/2026-07-19-docker-deployment-design.md`](docs/superpowers/specs/2026-07-19-docker-deployment-design.md)
 for the design and
 [`docs/superpowers/plans/2026-07-19-docker-deployment.md`](docs/superpowers/plans/2026-07-19-docker-deployment.md)
@@ -79,13 +78,38 @@ One-time bootstrap, on a machine with a browser:
 The access token is refreshed automatically at runtime from the embedded refresh
 token; re-run the bootstrap only if it's revoked or expires.
 
+## Radicale setup (Contacts + Reminders)
+
+Contacts and Reminders are stored in [Radicale](https://radicale.org/), a lightweight
+CalDAV/CardDAV server. **Radicale sits behind Gateway, not in front of it** — clients
+(the `gw` CLI, a companion iOS app) talk plain JSON to Gateway's tools/`/v1` API;
+Gateway is the only thing that speaks CalDAV/CardDAV to Radicale. There's no need to
+expose Radicale itself to any client, and no client needs to support CalDAV/CardDAV
+directly.
+
+1. Run a Radicale instance reachable from wherever Gateway runs (see `infra/` for the
+   Ansible role). It needs no public exposure — Gateway is its only client.
+2. Set `GATEWAY_RADICALE__BASE_URL` (and `USERNAME`/`PASSWORD` if Radicale has auth
+   enabled).
+3. `GATEWAY_RADICALE__CONTACTS_PATH` pins the CardDAV addressbook collection to use;
+   leave unset to default to `<principal>/contacts/`, auto-created on first use.
+4. Reminder lists map to CalDAV calendar collections and are auto-created on first
+   write; `GATEWAY_RADICALE__DEFAULT_LIST` (default `Reminders`) is used when a
+   reminder doesn't name a list.
+
+The `/v1/reminders` JSON-HTTP sync API (`gateway/reminders/http.py`) is unaffected by
+this — it's the same offline-sync protocol as before, just backed by Radicale instead
+of local SQLite. See
+[`docs/superpowers/specs/2026-07-19-radicale-contacts-reminders-design.md`](docs/superpowers/specs/2026-07-19-radicale-contacts-reminders-design.md)
+for the full design.
+
 ## Install as a launchd service (Mac)
 
 ```bash
 ./scripts/install_service.sh
 ```
 
-This writes a launchd plist, grants TCC permission for Contacts, and starts the service. It will restart automatically on reboot.
+This writes a launchd plist and starts the service. It will restart automatically on reboot.
 
 To remove:
 ```bash
