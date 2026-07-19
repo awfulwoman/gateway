@@ -65,6 +65,28 @@ Or for stdio mode (Claude Code spawns the process on demand):
 claude mcp add --scope user gateway -- uv --project /path/to/gateway run gateway --transport stdio
 ```
 
+## CLI (`gw`)
+
+A command-line client for the same tools, useful for scripting or quick lookups
+without going through Claude.
+
+```bash
+gw calendar list-events today
+gw reminders list --list Shopping
+gw bookmarks search "python"
+```
+
+Global options:
+
+| Option | Env var | Default | Description |
+|---|---|---|---|
+| `--server` | `GATEWAY_URL` | `http://127.0.0.1:4000/mcp` | Gateway server URL |
+| `--token` | `GATEWAY_TOKEN` | (none) | Bearer token, sent as `Authorization: Bearer <token>` — only needed if the server has auth enabled |
+
+Command groups: `calendar`, `reminders`, `contacts`, `email`, `notes`, `bookmarks`,
+`location`, `issues`. Run `gw --help` or `gw <group> --help` for the full list of
+subcommands.
+
 ## Configuration
 
 All config via environment variables (or `.env` file):
