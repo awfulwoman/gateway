@@ -1,6 +1,7 @@
 # Rename "tasks" to "issues" — design spec
 
 **Date:** 2026-06-12
+**Status:** Done
 
 ## Motivation
 

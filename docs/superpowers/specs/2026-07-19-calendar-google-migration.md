@@ -1,7 +1,7 @@
 # Calendar tool: EventKit → Google Calendar (OAuth)
 
 **Date:** 2026-07-19
-**Status:** Proposed
+**Status:** Done
 **Audience:** the developer implementing the change inside the Gateway repo. Assumes
 familiarity with the existing tool pattern (`init`/`register`, one module per source).
 Companion implementation plan: `docs/superpowers/plans/2026-07-19-calendar-google.md`.

@@ -1,7 +1,7 @@
 # `gw` CLI Design
 
 **Date:** 2026-06-07
-**Status:** Approved
+**Status:** Done
 
 ## Summary
 

@@ -1,7 +1,7 @@
 # Reminders JSON Interchange — Design Spec
 
 **Date:** 2026-07-18
-**Status:** Proposed
+**Status:** Done
 
 **Companion docs:**
 - Gateway/MCP build: `docs/superpowers/plans/2026-07-18-reminders-json-interchange.md`

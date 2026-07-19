@@ -1,7 +1,7 @@
 # Containerize Gateway for deployment to the storage host
 
 **Date:** 2026-07-19
-**Status:** Approved
+**Status:** Done
 **Audience:** the developer implementing the change across the `gateway` and `infra`
 repos. Assumes familiarity with Gateway's tool pattern (`init`/`register`, one module
 per source) and infra's `composition-*` Ansible role convention.

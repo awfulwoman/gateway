@@ -1,5 +1,8 @@
 # Obsidian Issues — Design Spec
 
+**Date:** 2026-06-16
+**Status:** Done
+
 ## Overview
 
 Replace Vikunja as the issue-tracking backend with Obsidian. Issues become markdown files in the vault, queryable via Obsidian Bases and manageable via the gateway CLI and MCP tools.

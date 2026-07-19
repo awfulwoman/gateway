@@ -1,7 +1,7 @@
 # Reminders iOS app — build handoff
 
 **Date:** 2026-07-18
-**Status:** Proposed
+**Status:** Cancelled
 **Audience:** the agent/developer building the iOS app, in a **new, separate
 project**. This document is **self-contained** — you do not need the Gateway
 repository or any prior app ("NowThis") to build against it. Everything about the
