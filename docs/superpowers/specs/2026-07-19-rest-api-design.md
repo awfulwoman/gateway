@@ -29,6 +29,18 @@ We want a **first-class REST API** covering the rest of the tool surface, so a r
 iOS app — and any future client — can talk to Gateway idiomatically. This generalises
 the pattern that `/v1/reminders` already proved.
 
+**Target end-state layering.** Two thin adapters over one set of tool functions:
+
+- **MCP (`/mcp`)** — the adapter for **LLM agents** (Claude Code, `chives`).
+- **REST (`/v1/*`)** — the adapter for **programmatic clients**: the iOS app, the `gw`
+  CLI, and anything future.
+
+Today the CLI is oddly a client of the *MCP* surface despite not being an agent. Part of
+this effort's direction is to fix that: **the CLI will migrate to the REST API**, so MCP
+is left as agents-only. That migration is **not** in v1 — see the Non-goals below and the
+detailed plan in §9 — but the API is designed from the start to be the CLI's eventual
+backend.
+
 ### Goals
 
 - Idiomatic, resource-oriented REST under `/v1/*` (e.g. `GET /v1/bookmarks`), returning
@@ -54,6 +66,9 @@ the pattern that `/v1/reminders` already proved.
 - No OAuth / user login / multi-user. One owner, static per-client tokens, exactly like
   every other Gateway secret.
 - No websockets/streaming; request/response only.
+- **The `gw` CLI is not migrated in v1** — it stays a pure MCP client. It moves to the
+  REST API **wholesale**, in a single later change, only once the API covers its full
+  command surface (§9). It is never a mixed MCP+REST client.
 
 ---
 
@@ -67,6 +82,9 @@ the pattern that `/v1/reminders` already proved.
    wildcards.
 4. **Discoverability:** generated OpenAPI + docs.
 5. **First domains:** Bookmarks + Email.
+6. **CLI migration:** the `gw` CLI will move from MCP to the REST API, but **wholesale and
+   later** — it stays 100% MCP through v1 and switches in one change once the API covers
+   its full surface (never a mixed-transport client). End state: MCP is agents-only.
 
 ---
 
@@ -185,7 +203,7 @@ of these changes, that's a bug, not part of this work.
 | # | Carried over | Guarantee | At risk because |
 |---|---|---|---|
 | 1 | **`/mcp`** (FastMCP streamable app + all registered tools) | Same path, same JSON-RPC behaviour, same `GATEWAY_SERVER__AUTH_TOKENS` bearer auth | It moves from top-level app to mounted sub-app (see §3.1 — lifespan + path prefix) |
-| 2 | **`gw` CLI** | Unchanged — still an MCP client of `/mcp`; no CLI code touched | Depends entirely on #1 |
+| 2 | **`gw` CLI** | Unchanged **in v1** — still a pure MCP client of `/mcp`; no CLI code touched. (Migrates to REST wholesale later, §9 — not permanent.) | Depends entirely on #1 |
 | 3 | **`/v1/reminders`** — `GET /v1/reminders`, `POST /v1/reminders/sync`, `PUT/DELETE /v1/reminders/{id}` | Byte-for-byte wire protocol: snapshot/`since` sync, LWW-on-`updated_at`, tombstones, `409` stale, error envelope | Same app whose top-level structure changes; carried as plain Starlette routes, **not** ported to FastAPI |
 | 4 | **`/v1/geocode`** — `GET /v1/geocode` | Same query params (`q`, or `lat`+`lon`) and responses | As #3 |
 | 5 | **Reminders auth** — `GATEWAY_REMINDERS__API_TOKENS`, in-handler check | Unchanged; **not** replaced by the new scoped tokens in v1 | New scoped auth is introduced alongside it (§4.4); must not accidentally start gating these routes |
@@ -372,7 +390,30 @@ through to the tool. `PATCH /v1/emails/{message_id}` body `{ "read": true }` map
   Deferred out of v1 to avoid churning the frozen reminders protocol in the same change
   that introduces the framework. Backward-compat plan: honour legacy reminders tokens as
   an implicit `reminders:*` client during the transition.
-- **More domains:** Calendar, Notes/Issues, Location — same router + reuse pattern.
+- **More domains:** Calendar, Notes/Issues, Location — same router + reuse pattern. These
+  are also the **precondition for the CLI migration** below: the CLI can't leave MCP until
+  the API covers its whole command surface.
+- **Migrate the `gw` CLI to REST (wholesale).** Once the API's domain coverage ⊇ the CLI's
+  surface, switch the CLI from MCP to REST in one change:
+  - **Coverage gate.** The CLI has command groups for calendar, reminders, contacts,
+    email, notes, bookmarks, location, issues. All except contacts must have REST
+    endpoints first (this pulls the "More domains" item, plus the reminders/geocode port,
+    into hard prerequisites).
+  - **Client rewrite.** Replace `gateway/cli/client.py`'s JSON-RPC `tools/call` +
+    SSE-envelope parsing with plain REST calls (typed JSON, standard status codes). Per
+    the target layering, the CLI stops touching `/mcp` entirely.
+  - **Auth change.** The CLI authenticates with a scoped `GATEWAY_API__CLIENTS` token
+    (likely broad — e.g. `*` — since it's the owner's shell), replacing the MCP
+    `GATEWAY_TOKEN`/`GATEWAY_SERVER__AUTH_TOKENS` path. Update the `gateway-cli` skill and
+    the CLI's `--token`/env docs.
+  - **No mixed state.** The switch is atomic per the decision (§2.6): the CLI is 100% MCP
+    before it and 100% REST after; it is never split across transports.
+  - **Contacts caveat (open detail).** `gw contacts` has no REST target (macOS-only,
+    excluded — §1). Against the deployed Linux container it is already non-functional
+    (contacts tools aren't registered there), so the wholesale switch effectively retires
+    `gw contacts` rather than leaving a lone MCP command. Decide at migration time: drop
+    the command, or keep it as an explicitly MCP-only exception (which would violate
+    "never mixed" — dropping is cleaner).
 - **`delete_bookmark`** tool + `DELETE /v1/bookmarks/{id}`.
 - Optional: rate limiting / request logging per client.
 
