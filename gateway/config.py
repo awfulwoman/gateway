@@ -32,12 +32,6 @@ class OwnTracksConfig(BaseModel):
 
 
 class RemindersConfig(BaseModel):
-    # Transitional CalDAV fields — used by the current tools/reminders.py backend
-    # and the migration script; retired once the SQLite store cuts over.
-    base_url: str = ""
-    username: str = ""
-    password: str = ""
-
     db_path: str = ""
     api_tokens: Annotated[list[str], NoDecode] = []
     nominatim_url: str = ""
