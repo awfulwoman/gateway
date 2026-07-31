@@ -205,3 +205,165 @@ def reminders_server():
 @pytest.fixture
 def reminders_server_token() -> str:
     return f"test-{uuid.uuid4().hex[:8]}"
+
+
+class _FakeCalendarServer:
+    """Stands in for apple-calendar-server: implements the same wire contract
+    (see apple_calendar_server/http.py) over a plain in-memory dict instead of
+    EventKit. Mirrors `_FakeRemindersServer` above — gateway's calendar_server/
+    store.py is just an HTTP client, so these tests exercise that client against a
+    generically-correct backend. Storage is keyed by bearer token for per-test
+    isolation via a fresh token, without restarting the server."""
+
+    def __init__(self):
+        self._by_token: dict[str, dict[str, dict]] = {}
+
+    def _db(self, token: str) -> dict[str, dict]:
+        return self._by_token.setdefault(token, {})
+
+    def _authorized(self, request: Request) -> str | None:
+        header = request.headers.get("authorization", "")
+        if not header.startswith("Bearer "):
+            return None
+        return header[len("Bearer "):]
+
+    async def list_events(self, request: Request) -> JSONResponse:
+        token = self._authorized(request)
+        if not token:
+            return JSONResponse({"error": {"code": "unauthorized", "message": "missing bearer token"}}, status_code=401)
+        db = self._db(token)
+        start = request.query_params.get("start")
+        end = request.query_params.get("end")
+        calendar_name = request.query_params.get("calendar")
+        since = request.query_params.get("since")
+
+        results = list(db.values())
+        if start:
+            results = [e for e in results if e.get("deleted") or e["start"] >= start]
+        if end:
+            results = [e for e in results if e.get("deleted") or e["start"] <= end]
+        if calendar_name:
+            results = [e for e in results if e.get("calendar") == calendar_name]
+        if since:
+            results = [e for e in results if e["updated_at"] > since]
+        results.sort(key=lambda e: e["updated_at"])
+        return JSONResponse({"server_time": now_utc(), "events": results})
+
+    async def get_event(self, request: Request) -> JSONResponse:
+        token = self._authorized(request)
+        if not token:
+            return JSONResponse({"error": {"code": "unauthorized", "message": "missing bearer token"}}, status_code=401)
+        db = self._db(token)
+        id = request.path_params["id"]
+        if id not in db:
+            return JSONResponse({"error": {"code": "not_found", "message": "no such event"}}, status_code=404)
+        return JSONResponse(db[id])
+
+    async def put_event(self, request: Request) -> JSONResponse:
+        token = self._authorized(request)
+        if not token:
+            return JSONResponse({"error": {"code": "unauthorized", "message": "missing bearer token"}}, status_code=401)
+        db = self._db(token)
+        body = await request.json()
+        body["id"] = request.path_params["id"]
+        body["calendar"] = body.get("calendar") or "Calendar"  # server-side default, matching apple-calendar-server's own
+
+        if not (body.get("title") or "").strip():
+            return JSONResponse({"error": {"code": "validation_error", "message": "title is required and must be non-empty"}}, status_code=400)
+        if not body.get("start"):
+            return JSONResponse({"error": {"code": "validation_error", "message": "start is required"}}, status_code=400)
+        if not body.get("end"):
+            return JSONResponse({"error": {"code": "validation_error", "message": "end is required"}}, status_code=400)
+        if body["end"] < body["start"]:
+            return JSONResponse({"error": {"code": "validation_error", "message": "end must not be before start"}}, status_code=400)
+
+        existing = db.get(body["id"])
+        if existing is not None and body["updated_at"] <= existing["updated_at"]:
+            return JSONResponse({"current": existing}, status_code=409)
+
+        db[body["id"]] = body
+        return JSONResponse(body)
+
+    async def delete_event(self, request: Request) -> JSONResponse:
+        token = self._authorized(request)
+        if not token:
+            return JSONResponse({"error": {"code": "unauthorized", "message": "missing bearer token"}}, status_code=401)
+        db = self._db(token)
+        id = request.path_params["id"]
+        existing = db.get(id)
+        if existing is None:
+            return JSONResponse({"error": {"code": "not_found", "message": "no such event"}}, status_code=404)
+
+        body = {}
+        if await request.body():
+            body = await request.json()
+        updated_at = body.get("updated_at") or now_after(existing["updated_at"])
+        if updated_at <= existing["updated_at"]:
+            return JSONResponse({"current": existing}, status_code=409)
+
+        tombstone = dict(existing)
+        tombstone["deleted"] = True
+        tombstone["updated_at"] = updated_at
+        db[id] = tombstone
+        return JSONResponse(tombstone)
+
+    async def get_calendars(self, request: Request) -> JSONResponse:
+        token = self._authorized(request)
+        if not token:
+            return JSONResponse({"error": {"code": "unauthorized", "message": "missing bearer token"}}, status_code=401)
+        db = self._db(token)
+        names = sorted({e["calendar"] for e in db.values() if not e.get("deleted")})
+        return JSONResponse({"calendars": names})
+
+    async def gc_tombstones(self, request: Request) -> JSONResponse:
+        token = self._authorized(request)
+        if not token:
+            return JSONResponse({"error": {"code": "unauthorized", "message": "missing bearer token"}}, status_code=401)
+        db = self._db(token)
+        body = await request.json() if await request.body() else {}
+        cutoff_days = int(body.get("older_than_days", 30))
+        from datetime import datetime, timedelta, timezone
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=cutoff_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        to_remove = [id for id, e in db.items() if e.get("deleted") and e["updated_at"] < cutoff]
+        for id in to_remove:
+            del db[id]
+        return JSONResponse({"removed": len(to_remove)})
+
+    def app(self) -> Starlette:
+        return Starlette(routes=[
+            Route("/events", self.list_events, methods=["GET"]),
+            Route("/events/{id}", self.get_event, methods=["GET"]),
+            Route("/events/{id}", self.put_event, methods=["PUT"]),
+            Route("/events/{id}", self.delete_event, methods=["DELETE"]),
+            Route("/calendars", self.get_calendars, methods=["GET"]),
+            Route("/admin/gc_tombstones", self.gc_tombstones, methods=["POST"]),
+        ])
+
+
+@pytest.fixture(scope="session")
+def calendar_server():
+    """An in-process fake apple-calendar-server for the whole test session — see
+    `_FakeCalendarServer` docstring. Per-test isolation comes from a fresh bearer
+    token (`calendar_server_token`), not from restarting the server."""
+    port = _free_port()
+    server = uvicorn.Server(uvicorn.Config(_FakeCalendarServer().app(), host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    base_url = f"http://127.0.0.1:{port}"
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.05)
+    else:
+        raise RuntimeError("fake calendar server did not start in time")
+
+    yield base_url
+
+    server.should_exit = True
+    thread.join(timeout=5)
+
+
+@pytest.fixture
+def calendar_server_token() -> str:
+    return f"test-{uuid.uuid4().hex[:8]}"

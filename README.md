@@ -1,6 +1,6 @@
 # Gateway Server + CLI tools
 
-MCP server providing Claude Code access to personal services: email, Google Calendar, Contacts (backed by Radicale/CardDAV), Reminders (backed by real Apple Reminders via [apple-reminders-server](https://github.com/awfulwoman/apple-reminders-server)), an Obsidian vault, and Karakeep bookmarks.
+MCP server providing Claude Code access to personal services: email, Calendar (backed by real Apple Calendar via [apple-calendar-server](https://github.com/awfulwoman/apple-calendar-server)), Contacts (backed by Radicale/CardDAV), Reminders (backed by real Apple Reminders via [apple-reminders-server](https://github.com/awfulwoman/apple-reminders-server)), an Obsidian vault, and Karakeep bookmarks.
 
 ## Tools (44 total)
 
@@ -45,40 +45,31 @@ docker run -d --name gateway -p 4000:4000 --env-file .env gateway
 ```
 
 Contacts are backed by Radicale (CardDAV), reached over HTTP via `GATEWAY_RADICALE__*`.
-Reminders are backed by apple-reminders-server, reached over HTTP via
-`GATEWAY_REMINDERS_SERVER__*` — it runs natively on Malcolm (the always-on Mac, for
-EventKit access), not in this container. Both work the same in the container as on
-macOS — no platform-specific dependency to exclude here. Mount
+Reminders and Calendar are backed by apple-reminders-server / apple-calendar-server,
+reached over HTTP via `GATEWAY_REMINDERS_SERVER__*` / `GATEWAY_CALENDAR_SERVER__*` —
+both run natively on Malcolm (the always-on Mac, for EventKit access), not in this
+container. All three work the same in the container as on macOS — no
+platform-specific dependency to exclude here. Mount
 `GATEWAY_OBSIDIAN__VAULT_PATH` as a volume so notes persist across container restarts. See
 [`docs/superpowers/specs/2026-07-19-docker-deployment-design.md`](docs/superpowers/specs/2026-07-19-docker-deployment-design.md)
 for the design and
 [`docs/superpowers/plans/2026-07-19-docker-deployment.md`](docs/superpowers/plans/2026-07-19-docker-deployment.md)
 for the implementation plan (container image, Ansible role, host migration).
 
-## Google Calendar setup
+## apple-calendar-server setup (Calendar)
 
-Calendar events are read/written via the Google Calendar API, authenticated as you
-(OAuth), not a service account — so events you create keep you as organizer and every
-calendar your account can see is visible without sharing it separately.
+Calendar events are backed by real Apple Calendar (via `EventKit`), fronted by a
+small authorised REST API — [apple-calendar-server](https://github.com/awfulwoman/apple-calendar-server) —
+running natively on Malcolm, the always-on Mac (EventKit is macOS-only and needs a
+logged-in GUI session for the Calendar permission grant, so it can't run in this
+container). This replaced Google Calendar as the calendar backend, mirroring the
+Reminders migration below: multiple calendars are first-class (see
+`list_calendars`), and events created on any Apple device — not just through
+Gateway — show up here too.
 
-One-time bootstrap, on a machine with a browser:
-
-1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and
-   enable the **Google Calendar API**.
-2. Configure the OAuth consent screen (External, add yourself as a test user), then
-   **publish** it — apps left in "Testing" mode get refresh tokens that expire after 7
-   days.
-3. Create an OAuth client ID of type **Desktop app** and copy its **client ID** and
-   **client secret** from the credentials page (no need to download the JSON file).
-4. Run the bootstrap script, which opens a browser for consent and prints the
-   resulting credentials as JSON:
-   ```bash
-   uv run python -m gateway.gcal_auth <client-id> <client-secret>
-   ```
-5. Set `GATEWAY_GCAL__TOKEN_JSON` to that JSON output (see Configuration below).
-
-The access token is refreshed automatically at runtime from the embedded refresh
-token; re-run the bootstrap only if it's revoked or expires.
+1. Deploy apple-calendar-server on Malcolm (see its own README, and the infra role
+   `system-apple-calendar-server`).
+2. Set `GATEWAY_CALENDAR_SERVER__BASE_URL` and `__BEARER_TOKEN` to match.
 
 ## Radicale setup (Contacts)
 
@@ -178,7 +169,8 @@ All config via environment variables (or `.env` file):
 | `GATEWAY_IMAP__USERNAME` | IMAP username |
 | `GATEWAY_IMAP__PASSWORD` | IMAP password |
 | `GATEWAY_OBSIDIAN__VAULT_PATH` | Absolute path to Obsidian vault |
-| `GATEWAY_GCAL__TOKEN_JSON` | Google Calendar OAuth credentials, as JSON (see Google Calendar setup above) |
+| `GATEWAY_CALENDAR_SERVER__BASE_URL` | apple-calendar-server base URL (see apple-calendar-server setup above) |
+| `GATEWAY_CALENDAR_SERVER__BEARER_TOKEN` | apple-calendar-server bearer token |
 | `GATEWAY_KARAKEEP__BASE_URL` | Karakeep instance URL |
 | `GATEWAY_KARAKEEP__API_KEY` | Karakeep API key |
 | `GATEWAY_SERVER__HOST` | SSE server bind address (default 127.0.0.1) |

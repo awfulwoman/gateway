@@ -31,3 +31,11 @@ def test_reminders_server_config_from_env(monkeypatch):
     config = Config()
     assert config.reminders_server.base_url == "https://apple-reminders.internal"
     assert config.reminders_server.bearer_token == "secret"
+
+
+def test_calendar_server_config_from_env(monkeypatch):
+    monkeypatch.setenv("GATEWAY_CALENDAR_SERVER__BASE_URL", "https://apple-calendar.internal")
+    monkeypatch.setenv("GATEWAY_CALENDAR_SERVER__BEARER_TOKEN", "secret")
+    config = Config()
+    assert config.calendar_server.base_url == "https://apple-calendar.internal"
+    assert config.calendar_server.bearer_token == "secret"

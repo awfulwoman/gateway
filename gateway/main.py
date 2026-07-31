@@ -46,7 +46,7 @@ async def _run_http(mcp: FastMCP, config: Config) -> None:
 def create_server(config: Config) -> FastMCP:
     mcp = FastMCP("gateway", host=config.server.host, port=config.server.port, stateless_http=True, json_response=True)
 
-    calendar.init(config.gcal)
+    calendar.init(config.calendar_server)
     calendar.register(mcp)
     reminders.init(config.reminders, config.reminders_server)
     reminders.register(mcp)

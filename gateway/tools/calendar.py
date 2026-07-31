@@ -1,65 +1,16 @@
 from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from google.oauth2.credentials import Credentials
-from gateway.config import GCalConfig
+from gateway.config import CalendarServerConfig
+from gateway.calendar_server import store
 
-SCOPES = ["https://www.googleapis.com/auth/calendar"]
-
-_config: GCalConfig | None = None
-_service = None
+_config: CalendarServerConfig | None = None
 
 
-def init(config: GCalConfig) -> None:
+def init(config: CalendarServerConfig) -> None:
     global _config
     _config = config
-
-
-def _get_service():
-    global _service
-    if _service is not None:
-        return _service
-    assert _config and _config.token_json, "Google Calendar not configured (GATEWAY_GCAL__TOKEN_JSON required)"
-
-    creds = Credentials.from_authorized_user_info(json.loads(_config.token_json), SCOPES)
-    _service = build("calendar", "v3", credentials=creds, cache_discovery=False)
-    return _service
-
-
-def _encode_id(calendar_id: str, event_id: str) -> str:
-    return f"{calendar_id}::{event_id}"
-
-
-def _split_id(event_id: str) -> tuple[str, str]:
-    if "::" in event_id:
-        cal_id, ev_id = event_id.split("::", 1)
-        return cal_id, ev_id
-    return "primary", event_id
-
-
-def _ns_date(iso: str) -> str:
-    dt = datetime.fromisoformat(iso)
-    if not dt.tzinfo:
-        dt = dt.astimezone()
-    return dt.isoformat()
-
-
-def _event_to_dict(ev: dict, cal_summary: str) -> dict:
-    start = ev.get("start", {})
-    end = ev.get("end", {})
-    return {
-        "event_id": _encode_id(ev.get("_calendar_id", ""), ev.get("id", "")),
-        "title": ev.get("summary", ""),
-        "start": start.get("dateTime") or start.get("date", ""),
-        "end": end.get("dateTime") or end.get("date", ""),
-        "all_day": "date" in start,
-        "location": ev.get("location", ""),
-        "notes": ev.get("description", ""),
-        "calendar": cal_summary,
-        "url": ev.get("htmlLink", ""),
-    }
+    store.init(config)
 
 
 def _parse_period(period: str) -> tuple[datetime, datetime]:
@@ -90,75 +41,65 @@ def _parse_period(period: str) -> tuple[datetime, datetime]:
     raise ValueError(f"Unknown period: {period!r}. Use 'today', 'tomorrow', 'week', 'month', or 'YYYY-MM-DD:YYYY-MM-DD'.")
 
 
-def _list_calendars(service) -> list[dict]:
-    result = service.calendarList().list().execute()
-    return result.get("items", [])
+def _iso_utc(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _resolve_calendar_id(service, calendar_name: str) -> str:
-    if not calendar_name:
-        return "primary"
-    for cal in _list_calendars(service):
-        if cal.get("summary", "").lower() == calendar_name.lower():
-            return cal["id"]
-    return "primary"
+def _to_server_instant(iso: str) -> str:
+    """Normalise an arbitrary ISO 8601 instant (naive, offset-aware, or Z-suffixed)
+    into the UTC 'YYYY-MM-DDThh:mm:ssZ' form apple-calendar-server expects. A naive
+    input is interpreted as the local system time, matching the prior Google
+    Calendar tool's behaviour."""
+    dt = datetime.fromisoformat(iso.replace("Z", "+00:00")) if iso.endswith("Z") else datetime.fromisoformat(iso)
+    if dt.tzinfo is None:
+        dt = dt.astimezone()
+    return _iso_utc(dt)
+
+
+def _to_external(ev: dict) -> dict:
+    """Keeps the external tool contract (field names) stable across the Google
+    Calendar → apple-calendar-server backend swap, so the CLI formatter and any
+    existing consumers of this tool's JSON don't need to change."""
+    return {
+        "event_id": ev["id"],
+        "title": ev["title"],
+        "start": ev["start"],
+        "end": ev["end"],
+        "all_day": ev["all_day"],
+        "location": ev.get("location") or "",
+        "notes": ev.get("notes") or "",
+        "calendar": ev["calendar"],
+        "url": ev.get("url") or "",
+    }
 
 
 def list_calendars() -> str:
-    """List all available calendars with their names and identifiers."""
-    service = _get_service()
-    results = [
-        {"name": c.get("summary", ""), "id": c.get("id", ""), "color": c.get("backgroundColor", "")}
-        for c in _list_calendars(service)
-    ]
-    return json.dumps(results)
+    """List all available calendars with their names."""
+    names = store.list_calendars()
+    return json.dumps([{"name": name} for name in names])
 
 
 def list_calendar_events(period: str) -> str:
     """List calendar events for a time period. period can be: 'today', 'tomorrow', 'week' (next 7 days), 'month' (next 30 days), or a custom range as 'YYYY-MM-DD:YYYY-MM-DD'."""
-    service = _get_service()
     start, end = _parse_period(period)
-
-    results = []
-    for cal in _list_calendars(service):
-        cal_id, cal_summary = cal["id"], cal.get("summary", "")
-        resp = service.events().list(
-            calendarId=cal_id,
-            timeMin=start.isoformat(),
-            timeMax=end.isoformat(),
-            singleEvents=True,
-            orderBy="startTime",
-        ).execute()
-        for ev in resp.get("items", []):
-            ev["_calendar_id"] = cal_id
-            results.append(_event_to_dict(ev, cal_summary))
-
-    results.sort(key=lambda e: e["start"])
-    return json.dumps(results)
+    events = store.list_events(start=_iso_utc(start), end=_iso_utc(end), include_deleted=False)
+    events.sort(key=lambda e: e["start"])
+    return json.dumps([_to_external(e) for e in events])
 
 
 def search_calendar_events(query: str, days_ahead: int = 90) -> str:
     """Search calendar events by title, location, or notes. Searches forward from today up to days_ahead days (default 90)."""
-    service = _get_service()
     now = datetime.now(timezone.utc)
     end = now + timedelta(days=days_ahead)
+    events = store.list_events(start=_iso_utc(now), end=_iso_utc(end), include_deleted=False)
 
-    results = []
-    for cal in _list_calendars(service):
-        cal_id, cal_summary = cal["id"], cal.get("summary", "")
-        resp = service.events().list(
-            calendarId=cal_id,
-            timeMin=now.isoformat(),
-            timeMax=end.isoformat(),
-            q=query,
-            singleEvents=True,
-            orderBy="startTime",
-        ).execute()
-        for ev in resp.get("items", []):
-            ev["_calendar_id"] = cal_id
-            results.append(_event_to_dict(ev, cal_summary))
-
-    return json.dumps(results)
+    q = query.lower()
+    results = [
+        e for e in events
+        if q in e["title"].lower() or q in (e.get("location") or "").lower() or q in (e.get("notes") or "").lower()
+    ]
+    results.sort(key=lambda e: e["start"])
+    return json.dumps([_to_external(e) for e in results])
 
 
 def create_calendar_event(
@@ -170,25 +111,26 @@ def create_calendar_event(
     calendar_name: str = "",
 ) -> str:
     """Create a calendar event. Dates in ISO 8601 format (e.g. 2026-04-10T14:00:00). calendar_name is optional and defaults to the system default calendar."""
-    service = _get_service()
-    cal_id = _resolve_calendar_id(service, calendar_name)
-
-    body: dict = {
-        "summary": title,
-        "start": {"dateTime": _ns_date(start_iso)},
-        "end": {"dateTime": _ns_date(end_iso)},
+    now = store.now_utc()
+    event = {
+        "id": store.new_id(),
+        "title": title,
+        "notes": notes or None,
+        "location": location or None,
+        "all_day": False,
+        "start": _to_server_instant(start_iso),
+        "end": _to_server_instant(end_iso),
+        "calendar": calendar_name or None,
+        "url": None,
+        "created_at": now,
+        "updated_at": now,
+        "deleted": False,
     }
-    if location:
-        body["location"] = location
-    if notes:
-        body["description"] = notes
-
     try:
-        service.events().insert(calendarId=cal_id, body=body).execute()
-    except HttpError as e:
+        stored = store.upsert(event)
+    except ValueError as e:
         return json.dumps({"status": "error", "message": f"Failed to create event: {title} ({e})"})
-
-    return json.dumps({"status": "created", "title": title, "start": start_iso, "end": end_iso})
+    return json.dumps({"status": "created", "title": stored["title"], "start": stored["start"], "end": stored["end"]})
 
 
 def update_calendar_event(
@@ -200,43 +142,36 @@ def update_calendar_event(
     notes: str = "",
 ) -> str:
     """Update fields on an existing calendar event by event_id. Only supplied (non-empty) fields are changed."""
-    service = _get_service()
-    cal_id, ev_id = _split_id(event_id)
+    existing = store.get(event_id)
+    if existing is None or existing.get("deleted"):
+        return json.dumps({"status": "error", "message": f"Event not found: {event_id}"})
 
-    body: dict = {}
+    updated = dict(existing)
     if title:
-        body["summary"] = title
+        updated["title"] = title
     if start_iso:
-        body["start"] = {"dateTime": _ns_date(start_iso)}
+        updated["start"] = _to_server_instant(start_iso)
     if end_iso:
-        body["end"] = {"dateTime": _ns_date(end_iso)}
+        updated["end"] = _to_server_instant(end_iso)
     if location:
-        body["location"] = location
+        updated["location"] = location
     if notes:
-        body["description"] = notes
+        updated["notes"] = notes
+    updated["updated_at"] = store.now_after(existing["updated_at"])
 
     try:
-        service.events().patch(calendarId=cal_id, eventId=ev_id, body=body).execute()
-    except HttpError as e:
-        if e.resp.status == 404:
-            return json.dumps({"status": "error", "message": f"Event not found: {event_id}"})
+        store.upsert(updated)
+    except ValueError as e:
         return json.dumps({"status": "error", "message": f"Failed to update event: {e}"})
-
     return json.dumps({"status": "updated", "event_id": event_id})
 
 
 def delete_calendar_event(event_id: str) -> str:
     """Delete a calendar event by its event_id (obtained from list_calendar_events or search_calendar_events)."""
-    service = _get_service()
-    cal_id, ev_id = _split_id(event_id)
-
     try:
-        service.events().delete(calendarId=cal_id, eventId=ev_id).execute()
-    except HttpError as e:
-        if e.resp.status == 404:
-            return json.dumps({"status": "error", "message": f"Event not found: {event_id}"})
-        return json.dumps({"status": "error", "message": f"Failed to delete event: {e}"})
-
+        store.soft_delete(event_id)
+    except KeyError:
+        return json.dumps({"status": "error", "message": f"Event not found: {event_id}"})
     return json.dumps({"status": "deleted", "event_id": event_id})
 
 

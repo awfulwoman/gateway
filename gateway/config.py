@@ -18,8 +18,11 @@ class ObsidianConfig(BaseModel):
     vault_path: str = ""
 
 
-class GCalConfig(BaseModel):
-    token_json: str = ""
+class CalendarServerConfig(BaseModel):
+    """apple-calendar-server on Malcolm — real Apple Calendar via EventKit,
+    replacing Google Calendar as gateway's calendar backend."""
+    base_url: str = ""
+    bearer_token: str = ""
 
 
 class KarakeepConfig(BaseModel):
@@ -82,7 +85,7 @@ class Config(BaseSettings):
 
     imap: IMAPConfig = IMAPConfig()
     obsidian: ObsidianConfig = ObsidianConfig()
-    gcal: GCalConfig = GCalConfig()
+    calendar_server: CalendarServerConfig = CalendarServerConfig()
     karakeep: KarakeepConfig = KarakeepConfig()
     owntracks: OwnTracksConfig = OwnTracksConfig()
     reminders: RemindersConfig = RemindersConfig()

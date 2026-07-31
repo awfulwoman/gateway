@@ -1,130 +1,26 @@
 from __future__ import annotations
 import json
-from unittest.mock import patch
+from datetime import datetime, timedelta, timezone
 import pytest
-from googleapiclient.errors import HttpError
 import gateway.tools.calendar as calendar
+from gateway.config import CalendarServerConfig
 
 
-class _Exec:
-    def __init__(self, result):
-        self._result = result
-
-    def execute(self):
-        return self._result
+@pytest.fixture
+def cal(calendar_server, calendar_server_token):
+    calendar.init(CalendarServerConfig(base_url=calendar_server, bearer_token=calendar_server_token))
+    return calendar
 
 
-class _FakeCalendarList:
-    def __init__(self, items):
-        self._items = items
-
-    def list(self):
-        return _Exec({"items": self._items})
-
-
-class _FakeEvents:
-    def __init__(self, list_items=None, raise_on: dict | None = None):
-        self._list_items = list_items if list_items is not None else []
-        self._raise_on = raise_on or {}
-        self.calls = []
-
-    def list(self, **kwargs):
-        self.calls.append(("list", kwargs))
-        return _Exec({"items": self._list_items})
-
-    def insert(self, **kwargs):
-        self.calls.append(("insert", kwargs))
-        if "insert" in self._raise_on:
-            raise self._raise_on["insert"]
-        return _Exec({"id": "new1"})
-
-    def patch(self, **kwargs):
-        self.calls.append(("patch", kwargs))
-        if "patch" in self._raise_on:
-            raise self._raise_on["patch"]
-        return _Exec({})
-
-    def delete(self, **kwargs):
-        self.calls.append(("delete", kwargs))
-        if "delete" in self._raise_on:
-            raise self._raise_on["delete"]
-        return _Exec({})
-
-
-class _FakeService:
-    def __init__(self, calendars, events: _FakeEvents | None = None):
-        self._calendars = calendars
-        self._events = events if events is not None else _FakeEvents()
-
-    def calendarList(self):
-        return _FakeCalendarList(self._calendars)
-
-    def events(self):
-        return self._events
-
-
-def _http_error(status: int) -> HttpError:
-    class _Resp:
-        pass
-
-    resp = _Resp()
-    resp.status = status
-    resp.reason = "error"
-    return HttpError(resp, b"{}")
+def _at(days_from_now: int, hour: int = 9) -> str:
+    """A UTC instant `days_from_now` days out, so tests stay valid regardless of
+    when they run (rather than hardcoding a date that eventually falls outside a
+    'month'/'week'-relative window)."""
+    dt = (datetime.now(timezone.utc) + timedelta(days=days_from_now)).replace(hour=hour, minute=0, second=0, microsecond=0)
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 # --- pure helpers ---
-
-def test_event_id_round_trip():
-    encoded = calendar._encode_id("cal-abc", "ev-123")
-    assert encoded == "cal-abc::ev-123"
-    assert calendar._split_id(encoded) == ("cal-abc", "ev-123")
-
-
-def test_split_id_falls_back_to_primary_without_delimiter():
-    assert calendar._split_id("bare-id") == ("primary", "bare-id")
-
-
-def test_event_to_dict_timed():
-    ev = {
-        "_calendar_id": "cal1",
-        "id": "e1",
-        "summary": "Stand-up",
-        "start": {"dateTime": "2026-06-07T09:00:00+02:00"},
-        "end": {"dateTime": "2026-06-07T09:30:00+02:00"},
-        "location": "Office",
-        "description": "daily sync",
-        "htmlLink": "https://calendar.google.com/e1",
-    }
-    d = calendar._event_to_dict(ev, "Work")
-    assert d == {
-        "event_id": "cal1::e1",
-        "title": "Stand-up",
-        "start": "2026-06-07T09:00:00+02:00",
-        "end": "2026-06-07T09:30:00+02:00",
-        "all_day": False,
-        "location": "Office",
-        "notes": "daily sync",
-        "calendar": "Work",
-        "url": "https://calendar.google.com/e1",
-    }
-
-
-def test_event_to_dict_all_day():
-    ev = {
-        "_calendar_id": "cal1",
-        "id": "e2",
-        "summary": "Holiday",
-        "start": {"date": "2026-06-08"},
-        "end": {"date": "2026-06-09"},
-    }
-    d = calendar._event_to_dict(ev, "Work")
-    assert d["all_day"] is True
-    assert d["start"] == "2026-06-08"
-    assert d["location"] == ""
-    assert d["notes"] == ""
-    assert d["url"] == ""
-
 
 @pytest.mark.parametrize("period", ["today", "tomorrow", "week", "month"])
 def test_parse_period_known(period):
@@ -143,108 +39,114 @@ def test_parse_period_invalid():
         calendar._parse_period("nonsense")
 
 
+def test_to_server_instant_interprets_naive_as_local():
+    result = calendar._to_server_instant("2026-06-08T14:00:00")
+    expected = datetime(2026, 6, 8, 14, 0, 0).astimezone().astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    assert result == expected
+
+
+def test_to_server_instant_handles_z_suffix():
+    assert calendar._to_server_instant("2026-06-08T14:00:00Z") == "2026-06-08T14:00:00Z"
+
+
+def test_to_external_maps_id_to_event_id():
+    ev = {
+        "id": "abc123", "title": "Standup", "start": "2026-06-07T09:00:00Z", "end": "2026-06-07T09:30:00Z",
+        "all_day": False, "location": "Office", "notes": "daily sync", "calendar": "Work", "url": "https://x",
+    }
+    assert calendar._to_external(ev) == {
+        "event_id": "abc123", "title": "Standup", "start": "2026-06-07T09:00:00Z", "end": "2026-06-07T09:30:00Z",
+        "all_day": False, "location": "Office", "notes": "daily sync", "calendar": "Work", "url": "https://x",
+    }
+
+
+def test_to_external_defaults_missing_optionals_to_empty_string():
+    ev = {"id": "abc", "title": "X", "start": "s", "end": "e", "all_day": True, "calendar": "Calendar"}
+    d = calendar._to_external(ev)
+    assert d["location"] == "" and d["notes"] == "" and d["url"] == ""
+
+
 # --- tool functions ---
 
-def test_list_calendars():
-    service = _FakeService([{"summary": "Work", "id": "c1", "backgroundColor": "#0000ff"}])
-    with patch.object(calendar, "_get_service", return_value=service):
-        result = json.loads(calendar.list_calendars())
-    assert result == [{"name": "Work", "id": "c1", "color": "#0000ff"}]
+def test_list_calendars_empty(cal):
+    assert json.loads(cal.list_calendars()) == []
 
 
-def test_list_calendar_events_aggregates_and_sorts():
-    events = _FakeEvents(list_items=[
-        {"id": "e2", "summary": "Later", "start": {"dateTime": "2026-06-07T15:00:00+02:00"}, "end": {"dateTime": "2026-06-07T15:30:00+02:00"}},
-        {"id": "e1", "summary": "Earlier", "start": {"dateTime": "2026-06-07T09:00:00+02:00"}, "end": {"dateTime": "2026-06-07T09:30:00+02:00"}},
-    ])
-    service = _FakeService([{"summary": "Work", "id": "c1"}], events)
-    with patch.object(calendar, "_get_service", return_value=service):
-        result = json.loads(calendar.list_calendar_events("today"))
-    assert [e["title"] for e in result] == ["Earlier", "Later"]
-    assert all(e["calendar"] == "Work" for e in result)
-    assert events.calls[0][1]["calendarId"] == "c1"
-
-
-def test_search_calendar_events_passes_query():
-    events = _FakeEvents(list_items=[{"id": "e1", "summary": "Dentist", "start": {"dateTime": "2026-06-07T09:00:00+02:00"}, "end": {"dateTime": "2026-06-07T09:30:00+02:00"}}])
-    service = _FakeService([{"summary": "Work", "id": "c1"}], events)
-    with patch.object(calendar, "_get_service", return_value=service):
-        result = json.loads(calendar.search_calendar_events("dentist", days_ahead=30))
-    assert result[0]["title"] == "Dentist"
-    assert events.calls[0][1]["q"] == "dentist"
-
-
-def test_create_calendar_event_resolves_calendar_and_inserts():
-    events = _FakeEvents()
-    service = _FakeService([{"summary": "Myrtle", "id": "myrtle-id"}], events)
-    with patch.object(calendar, "_get_service", return_value=service):
-        result = json.loads(calendar.create_calendar_event(
-            "Trip", "2026-06-08T14:00:00", "2026-06-08T15:00:00", calendar_name="myrtle",
-        ))
+def test_create_calendar_event_defaults_to_default_calendar(cal):
+    result = json.loads(cal.create_calendar_event("Trip", _at(5), _at(5, hour=10)))
     assert result["status"] == "created"
-    call_kwargs = events.calls[0][1]
-    assert call_kwargs["calendarId"] == "myrtle-id"
-    assert call_kwargs["body"]["summary"] == "Trip"
+    assert result["title"] == "Trip"
+    assert json.loads(cal.list_calendars()) == [{"name": "Calendar"}]
 
 
-def test_create_calendar_event_defaults_to_primary():
-    events = _FakeEvents()
-    service = _FakeService([{"summary": "Work", "id": "c1"}], events)
-    with patch.object(calendar, "_get_service", return_value=service):
-        calendar.create_calendar_event("Trip", "2026-06-08T14:00:00", "2026-06-08T15:00:00")
-    assert events.calls[0][1]["calendarId"] == "primary"
+def test_create_calendar_event_in_named_calendar(cal):
+    cal.create_calendar_event("Trip", _at(5), _at(5, hour=10), calendar_name="Myrtle")
+    events = json.loads(cal.list_calendar_events("month"))
+    assert len(events) == 1
+    assert events[0]["calendar"] == "Myrtle"
+    assert events[0]["title"] == "Trip"
 
 
-def test_create_calendar_event_handles_error():
-    events = _FakeEvents(raise_on={"insert": _http_error(400)})
-    service = _FakeService([], events)
-    with patch.object(calendar, "_get_service", return_value=service):
-        result = json.loads(calendar.create_calendar_event("Trip", "2026-06-08T14:00:00", "2026-06-08T15:00:00"))
+def test_create_calendar_event_with_location_and_notes(cal):
+    cal.create_calendar_event("Dentist", _at(5), _at(5, hour=10), location="Clinic", notes="bring insurance card")
+    events = json.loads(cal.list_calendar_events("month"))
+    assert events[0]["location"] == "Clinic"
+    assert events[0]["notes"] == "bring insurance card"
+
+
+def test_create_calendar_event_rejects_empty_title(cal):
+    result = json.loads(cal.create_calendar_event("", _at(5), _at(5, hour=10)))
     assert result["status"] == "error"
+    assert json.loads(cal.list_calendar_events("month")) == []
 
 
-def test_update_calendar_event_sends_only_nonempty_fields():
-    events = _FakeEvents()
-    service = _FakeService([], events)
-    with patch.object(calendar, "_get_service", return_value=service):
-        result = json.loads(calendar.update_calendar_event("cal1::e1", title="New title"))
-    assert result == {"status": "updated", "event_id": "cal1::e1"}
-    call_kwargs = events.calls[0][1]
-    assert call_kwargs["calendarId"] == "cal1"
-    assert call_kwargs["eventId"] == "e1"
-    assert call_kwargs["body"] == {"summary": "New title"}
+def test_list_calendar_events_sorted_by_start(cal):
+    cal.create_calendar_event("Later", _at(5, hour=15), _at(5, hour=16))
+    cal.create_calendar_event("Earlier", _at(5, hour=9), _at(5, hour=10))
+    events = json.loads(cal.list_calendar_events("month"))
+    assert [e["title"] for e in events] == ["Earlier", "Later"]
 
 
-def test_update_calendar_event_not_found():
-    events = _FakeEvents(raise_on={"patch": _http_error(404)})
-    service = _FakeService([], events)
-    with patch.object(calendar, "_get_service", return_value=service):
-        result = json.loads(calendar.update_calendar_event("cal1::missing", title="x"))
+def test_search_calendar_events_matches_title_location_notes(cal):
+    cal.create_calendar_event("Call dentist", _at(5), _at(5, hour=10), notes="reschedule appointment")
+    cal.create_calendar_event("Buy stamps", _at(6), _at(6, hour=10))
+
+    by_title = json.loads(cal.search_calendar_events("dentist"))
+    assert len(by_title) == 1 and by_title[0]["title"] == "Call dentist"
+
+    by_notes = json.loads(cal.search_calendar_events("appointment"))
+    assert len(by_notes) == 1 and by_notes[0]["title"] == "Call dentist"
+
+
+def test_update_calendar_event_changes_only_supplied_fields(cal):
+    created = json.loads(cal.create_calendar_event("Standup", _at(5), _at(5, hour=10), notes="daily"))
+    events = json.loads(cal.list_calendar_events("month"))
+    event_id = events[0]["event_id"]
+
+    result = json.loads(cal.update_calendar_event(event_id, title="Standup (moved)"))
+    assert result == {"status": "updated", "event_id": event_id}
+
+    updated = json.loads(cal.list_calendar_events("month"))[0]
+    assert updated["title"] == "Standup (moved)"
+    assert updated["notes"] == "daily"  # untouched
+
+
+def test_update_calendar_event_not_found(cal):
+    result = json.loads(cal.update_calendar_event("no-such-id", title="x"))
     assert result["status"] == "error"
     assert "not found" in result["message"].lower()
 
 
-def test_delete_calendar_event():
-    events = _FakeEvents()
-    service = _FakeService([], events)
-    with patch.object(calendar, "_get_service", return_value=service):
-        result = json.loads(calendar.delete_calendar_event("cal1::e1"))
-    assert result == {"status": "deleted", "event_id": "cal1::e1"}
-    assert events.calls[0][1] == {"calendarId": "cal1", "eventId": "e1"}
+def test_delete_calendar_event(cal):
+    cal.create_calendar_event("Old meeting", _at(5), _at(5, hour=10))
+    event_id = json.loads(cal.list_calendar_events("month"))[0]["event_id"]
+
+    result = json.loads(cal.delete_calendar_event(event_id))
+    assert result == {"status": "deleted", "event_id": event_id}
+    assert json.loads(cal.list_calendar_events("month")) == []
 
 
-def test_delete_calendar_event_defaults_calendar_when_no_delimiter():
-    events = _FakeEvents()
-    service = _FakeService([], events)
-    with patch.object(calendar, "_get_service", return_value=service):
-        calendar.delete_calendar_event("bare-id")
-    assert events.calls[0][1] == {"calendarId": "primary", "eventId": "bare-id"}
-
-
-def test_delete_calendar_event_not_found():
-    events = _FakeEvents(raise_on={"delete": _http_error(404)})
-    service = _FakeService([], events)
-    with patch.object(calendar, "_get_service", return_value=service):
-        result = json.loads(calendar.delete_calendar_event("cal1::missing"))
+def test_delete_calendar_event_not_found(cal):
+    result = json.loads(cal.delete_calendar_event("no-such-id"))
     assert result["status"] == "error"
     assert "not found" in result["message"].lower()
