@@ -48,7 +48,7 @@ def create_server(config: Config) -> FastMCP:
 
     calendar.init(config.gcal)
     calendar.register(mcp)
-    reminders.init(config.reminders, config.radicale)
+    reminders.init(config.reminders, config.reminders_server)
     reminders.register(mcp)
     reminders_http.init(config.reminders)
 

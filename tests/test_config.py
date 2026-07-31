@@ -23,4 +23,11 @@ def test_radicale_config_from_env(monkeypatch):
     assert config.radicale.username == "gateway"
     assert config.radicale.password == "secret"
     assert config.radicale.contacts_path == "/gateway/contacts/"
-    assert config.radicale.default_list == "Reminders"
+
+
+def test_reminders_server_config_from_env(monkeypatch):
+    monkeypatch.setenv("GATEWAY_REMINDERS_SERVER__BASE_URL", "https://apple-reminders.internal")
+    monkeypatch.setenv("GATEWAY_REMINDERS_SERVER__BEARER_TOKEN", "secret")
+    config = Config()
+    assert config.reminders_server.base_url == "https://apple-reminders.internal"
+    assert config.reminders_server.bearer_token == "secret"

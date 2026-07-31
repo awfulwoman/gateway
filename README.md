@@ -1,6 +1,6 @@
 # Gateway Server + CLI tools
 
-MCP server providing Claude Code access to personal services: email, Google Calendar, Contacts and Reminders (backed by Radicale/CalDAV+CardDAV), an Obsidian vault, and Karakeep bookmarks.
+MCP server providing Claude Code access to personal services: email, Google Calendar, Contacts (backed by Radicale/CardDAV), Reminders (backed by real Apple Reminders via [apple-reminders-server](https://github.com/awfulwoman/apple-reminders-server)), an Obsidian vault, and Karakeep bookmarks.
 
 ## Tools (44 total)
 
@@ -44,10 +44,12 @@ docker build -t gateway .
 docker run -d --name gateway -p 4000:4000 --env-file .env gateway
 ```
 
-Contacts and Reminders are backed by Radicale (CalDAV/CardDAV), reached over HTTP via
-`GATEWAY_RADICALE__*`, so both tool groups work the same in the container as on macOS —
-no platform-specific dependency to exclude. Mount `GATEWAY_OBSIDIAN__VAULT_PATH` as a
-volume so notes persist across container restarts. See
+Contacts are backed by Radicale (CardDAV), reached over HTTP via `GATEWAY_RADICALE__*`.
+Reminders are backed by apple-reminders-server, reached over HTTP via
+`GATEWAY_REMINDERS_SERVER__*` — it runs natively on Malcolm (the always-on Mac, for
+EventKit access), not in this container. Both work the same in the container as on
+macOS — no platform-specific dependency to exclude here. Mount
+`GATEWAY_OBSIDIAN__VAULT_PATH` as a volume so notes persist across container restarts. See
 [`docs/superpowers/specs/2026-07-19-docker-deployment-design.md`](docs/superpowers/specs/2026-07-19-docker-deployment-design.md)
 for the design and
 [`docs/superpowers/plans/2026-07-19-docker-deployment.md`](docs/superpowers/plans/2026-07-19-docker-deployment.md)
@@ -78,14 +80,13 @@ One-time bootstrap, on a machine with a browser:
 The access token is refreshed automatically at runtime from the embedded refresh
 token; re-run the bootstrap only if it's revoked or expires.
 
-## Radicale setup (Contacts + Reminders)
+## Radicale setup (Contacts)
 
-Contacts and Reminders are stored in [Radicale](https://radicale.org/), a lightweight
-CalDAV/CardDAV server. **Radicale sits behind Gateway, not in front of it** — clients
-(the `gw` CLI, a companion iOS app) talk plain JSON to Gateway's tools/`/v1` API;
-Gateway is the only thing that speaks CalDAV/CardDAV to Radicale. There's no need to
-expose Radicale itself to any client, and no client needs to support CalDAV/CardDAV
-directly.
+Contacts are stored in [Radicale](https://radicale.org/), a lightweight CardDAV
+server. **Radicale sits behind Gateway, not in front of it** — clients (the `gw` CLI,
+a companion iOS app) talk plain JSON to Gateway's tools/`/v1` API; Gateway is the only
+thing that speaks CardDAV to Radicale. There's no need to expose Radicale itself to
+any client, and no client needs to support CardDAV directly.
 
 1. Run a Radicale instance reachable from wherever Gateway runs (see `infra/` for the
    Ansible role). It needs no public exposure — Gateway is its only client.
@@ -93,15 +94,28 @@ directly.
    enabled).
 3. `GATEWAY_RADICALE__CONTACTS_PATH` pins the CardDAV addressbook collection to use;
    leave unset to default to `<principal>/contacts/`, auto-created on first use.
-4. Reminder lists map to CalDAV calendar collections and are auto-created on first
-   write; `GATEWAY_RADICALE__DEFAULT_LIST` (default `Reminders`) is used when a
-   reminder doesn't name a list.
 
-The `/v1/reminders` JSON-HTTP sync API (`gateway/reminders/http.py`) is unaffected by
-this — it's the same offline-sync protocol as before, just backed by Radicale instead
-of local SQLite. See
+See
 [`docs/superpowers/specs/2026-07-19-radicale-contacts-reminders-design.md`](docs/superpowers/specs/2026-07-19-radicale-contacts-reminders-design.md)
-for the full design.
+for the original design (Reminders have since moved off Radicale — see below).
+
+## apple-reminders-server setup (Reminders)
+
+Reminders are backed by real Apple Reminders (via `EventKit`), fronted by a small
+authorised REST API — [apple-reminders-server](https://github.com/awfulwoman/apple-reminders-server) —
+running natively on Malcolm, the always-on Mac (EventKit is macOS-only and needs a
+logged-in GUI session for the Reminders permission grant, so it can't run in this
+container). This replaced Radicale as the reminders backend so that reminders created
+via Siri, the Reminders widget, or any Apple device show up through Gateway too,
+instead of only ever seeing writes that went through Gateway itself.
+
+1. Deploy apple-reminders-server on Malcolm (see its own README, and the infra role
+   `system-apple-reminders-server`).
+2. Set `GATEWAY_REMINDERS_SERVER__BASE_URL` and `__BEARER_TOKEN` to match.
+
+The `/v1/reminders` JSON-HTTP sync API (`gateway/reminders/http.py`) and its own auth
+(`GATEWAY_REMINDERS__API_TOKENS`) are unaffected by this — same offline-sync protocol
+as before; only the storage backend behind `gateway/reminders/store.py` changed.
 
 ## Install as a launchd service (Mac)
 

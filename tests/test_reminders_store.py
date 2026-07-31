@@ -1,12 +1,12 @@
 from __future__ import annotations
 import pytest
 import gateway.reminders.store as store
-from gateway.config import RadicaleConfig
+from gateway.config import RemindersServerConfig
 
 
 @pytest.fixture
-def db(radicale_server, radicale_user):
-    store.init(RadicaleConfig(base_url=radicale_server, username=radicale_user, password="x"))
+def db(reminders_server, reminders_server_token):
+    store.init(RemindersServerConfig(base_url=reminders_server, bearer_token=reminders_server_token))
     return store
 
 
