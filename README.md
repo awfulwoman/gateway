@@ -1,6 +1,6 @@
 # Gateway Server + CLI tools
 
-MCP server providing Claude Code access to personal services: email, Calendar (backed by real Apple Calendar via [apple-calendar-server](https://github.com/awfulwoman/apple-calendar-server)), Contacts (backed by Radicale/CardDAV), Reminders (backed by real Apple Reminders via [apple-reminders-server](https://github.com/awfulwoman/apple-reminders-server)), an Obsidian vault, and Karakeep bookmarks.
+MCP server providing Claude Code access to personal services: email, Calendar (backed by real Apple Calendar via [apple-calendar-server](https://github.com/awfulwoman/apple-calendar-server)), Contacts (backed by real macOS Contacts via [apple-contacts-server](https://github.com/awfulwoman/apple-contacts-server)), Reminders (backed by real Apple Reminders via [apple-reminders-server](https://github.com/awfulwoman/apple-reminders-server)), an Obsidian vault, and Karakeep bookmarks.
 
 ## Tools (44 total)
 
@@ -44,12 +44,12 @@ docker build -t gateway .
 docker run -d --name gateway -p 4000:4000 --env-file .env gateway
 ```
 
-Contacts are backed by Radicale (CardDAV), reached over HTTP via `GATEWAY_RADICALE__*`.
-Reminders and Calendar are backed by apple-reminders-server / apple-calendar-server,
-reached over HTTP via `GATEWAY_REMINDERS_SERVER__*` / `GATEWAY_CALENDAR_SERVER__*` —
-both run natively on Malcolm (the always-on Mac, for EventKit access), not in this
-container. All three work the same in the container as on macOS — no
-platform-specific dependency to exclude here. Mount
+Contacts, Reminders, and Calendar are backed by apple-contacts-server /
+apple-reminders-server / apple-calendar-server, reached over HTTP via
+`GATEWAY_CONTACTS_SERVER__*` / `GATEWAY_REMINDERS_SERVER__*` /
+`GATEWAY_CALENDAR_SERVER__*` — all three run natively on Malcolm (the always-on Mac,
+for Contacts/EventKit access), not in this container. All three work the same in the
+container as on macOS — no platform-specific dependency to exclude here. Mount
 `GATEWAY_OBSIDIAN__VAULT_PATH` as a volume so notes persist across container restarts. See
 [`docs/superpowers/specs/2026-07-19-docker-deployment-design.md`](docs/superpowers/specs/2026-07-19-docker-deployment-design.md)
 for the design and
@@ -71,24 +71,24 @@ Gateway — show up here too.
    `system-apple-calendar-server`).
 2. Set `GATEWAY_CALENDAR_SERVER__BASE_URL` and `__BEARER_TOKEN` to match.
 
-## Radicale setup (Contacts)
+## apple-contacts-server setup (Contacts)
 
-Contacts are stored in [Radicale](https://radicale.org/), a lightweight CardDAV
-server. **Radicale sits behind Gateway, not in front of it** — clients (the `gw` CLI,
-a companion iOS app) talk plain JSON to Gateway's tools/`/v1` API; Gateway is the only
-thing that speaks CardDAV to Radicale. There's no need to expose Radicale itself to
-any client, and no client needs to support CardDAV directly.
+Contacts are backed by real macOS Contacts (via the `Contacts` framework), fronted by
+a small authorised REST API — [apple-contacts-server](https://github.com/awfulwoman/apple-contacts-server) —
+running natively on Malcolm, the always-on Mac (the Contacts framework is macOS-only
+and needs a logged-in GUI session for the permission grant, so it can't run in this
+container). This replaced Radicale as the contacts backend, mirroring the Reminders
+migration below: contacts created via Siri, another device, or the Contacts app show
+up here too, instead of only ever seeing writes that went through Gateway itself.
 
-1. Run a Radicale instance reachable from wherever Gateway runs (see `infra/` for the
-   Ansible role). It needs no public exposure — Gateway is its only client.
-2. Set `GATEWAY_RADICALE__BASE_URL` (and `USERNAME`/`PASSWORD` if Radicale has auth
-   enabled).
-3. `GATEWAY_RADICALE__CONTACTS_PATH` pins the CardDAV addressbook collection to use;
-   leave unset to default to `<principal>/contacts/`, auto-created on first use.
+1. Deploy apple-contacts-server on Malcolm (see its own README, and the infra role
+   `system-apple-contacts-server`).
+2. Set `GATEWAY_CONTACTS_SERVER__BASE_URL` and `__BEARER_TOKEN` to match.
 
-See
+Unlike Reminders and Calendar, there's no offline-sync `/v1` API or LWW/tombstone
+contract for Contacts — see
 [`docs/superpowers/specs/2026-07-19-radicale-contacts-reminders-design.md`](docs/superpowers/specs/2026-07-19-radicale-contacts-reminders-design.md)
-for the original design (Reminders have since moved off Radicale — see below).
+for the original Radicale-backed design this backend swap builds on.
 
 ## apple-reminders-server setup (Reminders)
 

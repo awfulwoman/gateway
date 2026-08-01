@@ -268,15 +268,6 @@ wheels = [
 ]
 
 [[package]]
-name = "defusedxml"
-version = "0.7.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/0f/d5/c66da9b79e5bdb124974bfe172b4daf3c984ebd9c2a06e2b8a4dc7331c72/defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69", size = 75520, upload-time = "2021-03-08T10:59:26.269Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61", size = 25604, upload-time = "2021-03-08T10:59:24.45Z" },
-]
-
-[[package]]
 name = "dnspython"
 version = "2.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -306,7 +297,6 @@ dependencies = [
 dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "radicale" },
 ]
 
 [package.metadata]
@@ -327,7 +317,6 @@ requires-dist = [
 dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-asyncio", specifier = ">=0.23" },
-    { name = "radicale", specifier = ">=3.7.7" },
 ]
 
 [[package]]
@@ -503,15 +492,6 @@ wheels = [
 ]
 
 [[package]]
-name = "libpass"
-version = "1.9.3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/2a/f6/210563eef148773ef835d21c0fa1e8a43c5b10fceb1f63d5d650635b81da/libpass-1.9.3.tar.gz", hash = "sha256:7830b9323d9ba96a841ad698a8dec1d43a2b0b7f1c855c76772e7972c1c6d959", size = 692901, upload-time = "2025-10-09T14:26:28.363Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ed/a6/ff00d926a9f4ece9e0732bcea1c3e8e9280390f48cec53f237e21f220082/libpass-1.9.3-py3-none-any.whl", hash = "sha256:3cbeb14d22086660e92c30d787ea981973d67394e81c8c870e1a83cfe1c84353", size = 307118, upload-time = "2025-10-09T14:26:25.551Z" },
-]
-
-[[package]]
 name = "lxml"
 version = "6.1.1"
 source = { registry = "https://pypi.org/simple" }
@@ -664,15 +644,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/df/de/0d2b39fb4af88a0258f3bac87dfcbb48e73fbdea4a2ed0e2213f9a4c2f9a/packaging-26.1.tar.gz", hash = "sha256:f042152b681c4bfac5cae2742a55e103d27ab2ec0f3d88037136b6bfe7c9c5de", size = 215519, upload-time = "2026-04-14T21:12:49.362Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7a/c2/920ef838e2f0028c8262f16101ec09ebd5969864e5a64c4c05fad0617c56/packaging-26.1-py3-none-any.whl", hash = "sha256:5d9c0669c6285e491e0ced2eee587eaf67b670d94a19e94e3984a481aba6802f", size = 95831, upload-time = "2026-04-14T21:12:47.56Z" },
-]
-
-[[package]]
-name = "pika"
-version = "1.4.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f7/09/8c42dd00c4b3e09ebd174455d30823c261eefef9d2b7e94ae9ca779704c1/pika-1.4.1.tar.gz", hash = "sha256:e851f3e4992adfbf8eb64e9b86d94e3382f92ba0200055abedbb29676b8e713b", size = 154268, upload-time = "2026-05-22T18:01:24.855Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7f/7b/a09c0d378ee8604220902c58103104b2304ef99744c4b7fc45312d280484/pika-1.4.1-py3-none-any.whl", hash = "sha256:2daae7bd422a0fc4f4879fd48c9a1932ed74a0bc7172e1e5f9bde63a101ed074", size = 164962, upload-time = "2026-05-22T18:01:23.429Z" },
 ]
 
 [[package]]
@@ -1010,22 +981,6 @@ wheels = [
 ]
 
 [[package]]
-name = "radicale"
-version = "3.7.7"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "defusedxml" },
-    { name = "libpass" },
-    { name = "pika" },
-    { name = "requests" },
-    { name = "vobject" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/30/86/82dbf4d633644c74b8618a0aab7a333ca06b811797ecf7a1801ec5621d74/radicale-3.7.7.tar.gz", hash = "sha256:46c58d0340bc70a1219a46ca9c6a88b97293b555e15d41d66110c5e236243b64", size = 257422, upload-time = "2026-07-19T15:09:43.013Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/20/6e/9c21ba79ecb1cc3af2e355b7f55e21c8d3f0baf3b987de3175b6c4738655/radicale-3.7.7-py3-none-any.whl", hash = "sha256:4a706462e4ef9ebd19e954e969869455040d80fd279a0863d1101e009d30c224", size = 297383, upload-time = "2026-07-19T15:09:41.064Z" },
-]
-
-[[package]]
 name = "recurring-ical-events"
 version = "3.8.2"
 source = { registry = "https://pypi.org/simple" }
@@ -1052,21 +1007,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/22/f5/df4e9027acead3ecc63e50fe1e36aca1523e1719559c499951bb4b53188f/referencing-0.37.0.tar.gz", hash = "sha256:44aefc3142c5b842538163acb373e24cce6632bd54bdb01b21ad5863489f50d8", size = 78036, upload-time = "2025-10-13T15:30:48.871Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2c/58/ca301544e1fa93ed4f80d724bf5b194f6e4b945841c5bfd555878eea9fcb/referencing-0.37.0-py3-none-any.whl", hash = "sha256:381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231", size = 26766, upload-time = "2025-10-13T15:30:47.625Z" },
-]
-
-[[package]]
-name = "requests"
-version = "2.34.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "certifi" },
-    { name = "charset-normalizer" },
-    { name = "idna" },
-    { name = "urllib3" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ac/c3/e2a2b89f2d3e2179abd6d00ebd70bff6273f37fb3e0cc209f48b39d00cbf/requests-2.34.2.tar.gz", hash = "sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed", size = 142856, upload-time = "2026-05-14T19:25:27.735Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/f4/c67b0b3f1b9245e8d266f0f112c500d50e5b4e83cb6f3b71b6528104182a/requests-2.34.2-py3-none-any.whl", hash = "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0", size = 73075, upload-time = "2026-05-14T19:25:26.443Z" },
 ]
 
 [[package]]
@@ -1250,15 +1190,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/92/ff/5a28bdfd8c3ebec42564ac7d0e54ca3db65044a9314a97f9564fa7a1e926/tzdata-2026.3.tar.gz", hash = "sha256:4a1518b8993086a7982523e071643f3c0e5f213e75b21318e78bcabfff9d1415", size = 198674, upload-time = "2026-07-10T08:50:37.887Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e5/6d/b53b99a9f2766d095985947a5782f1702cabb129a34f7a802d7197af832f/tzdata-2026.3-py2.py3-none-any.whl", hash = "sha256:dc096730c87af6cab1b171c9d532be840741ff5d459015e7f6947bd7d7e54931", size = 348168, upload-time = "2026-07-10T08:50:36.46Z" },
-]
-
-[[package]]
-name = "urllib3"
-version = "2.7.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", hash = "sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c", size = 433602, upload-time = "2026-05-07T16:13:18.596Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", hash = "sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897", size = 131087, upload-time = "2026-05-07T16:13:17.151Z" },
 ]
 
 [[package]]

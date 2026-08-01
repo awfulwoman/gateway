@@ -39,3 +39,11 @@ def test_calendar_server_config_from_env(monkeypatch):
     config = Config()
     assert config.calendar_server.base_url == "https://apple-calendar.internal"
     assert config.calendar_server.bearer_token == "secret"
+
+
+def test_contacts_server_config_from_env(monkeypatch):
+    monkeypatch.setenv("GATEWAY_CONTACTS_SERVER__BASE_URL", "https://apple-contacts.internal")
+    monkeypatch.setenv("GATEWAY_CONTACTS_SERVER__BEARER_TOKEN", "secret")
+    config = Config()
+    assert config.contacts_server.base_url == "https://apple-contacts.internal"
+    assert config.contacts_server.bearer_token == "secret"

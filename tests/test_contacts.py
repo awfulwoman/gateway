@@ -2,12 +2,12 @@ from __future__ import annotations
 import json
 import pytest
 import gateway.tools.contacts as contacts
-from gateway.config import RadicaleConfig
+from gateway.config import ContactsServerConfig
 
 
 @pytest.fixture
-def cn(radicale_server, radicale_user):
-    contacts.init(RadicaleConfig(base_url=radicale_server, username=radicale_user, password="x"))
+def cn(contacts_server, contacts_server_token):
+    contacts.init(ContactsServerConfig(base_url=contacts_server, bearer_token=contacts_server_token))
     return contacts
 
 

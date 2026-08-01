@@ -49,8 +49,12 @@ class RemindersConfig(BaseModel):
 
 
 class RadicaleConfig(BaseModel):
-    """CardDAV storage backend for Contacts. Reminders moved off Radicale onto
-    RemindersServerConfig below — see gateway/reminders/store.py."""
+    """CardDAV storage backend, formerly used for Contacts. No longer read by any
+    registered tool — Reminders moved off Radicale onto RemindersServerConfig, and
+    Contacts has since moved onto ContactsServerConfig below (see
+    gateway/reminders/store.py and gateway/contacts_server/store.py). Kept only for
+    the historical one-shot migration scripts under scripts/ that still speak
+    CardDAV directly; safe to delete once those are retired."""
     base_url: str = ""
     username: str = ""
     password: str = ""
@@ -59,7 +63,14 @@ class RadicaleConfig(BaseModel):
 
 class RemindersServerConfig(BaseModel):
     """apple-reminders-server on Malcolm — real Apple Reminders via EventKit,
-    replacing Radicale as the reminders backend (Radicale still backs Contacts)."""
+    replacing Radicale as the reminders backend."""
+    base_url: str = ""
+    bearer_token: str = ""
+
+
+class ContactsServerConfig(BaseModel):
+    """apple-contacts-server on Malcolm — real macOS Contacts via the Contacts
+    framework, replacing Radicale as the contacts backend."""
     base_url: str = ""
     bearer_token: str = ""
 
@@ -91,4 +102,5 @@ class Config(BaseSettings):
     reminders: RemindersConfig = RemindersConfig()
     radicale: RadicaleConfig = RadicaleConfig()
     reminders_server: RemindersServerConfig = RemindersServerConfig()
+    contacts_server: ContactsServerConfig = ContactsServerConfig()
     server: ServerConfig = ServerConfig()

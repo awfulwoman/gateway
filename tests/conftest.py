@@ -1,11 +1,8 @@
 from __future__ import annotations
 import socket
-import subprocess
-import sys
 import threading
 import time
 import uuid
-import httpx
 import pytest
 import uvicorn
 from starlette.applications import Starlette
@@ -19,48 +16,6 @@ def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
-
-
-@pytest.fixture(scope="session")
-def radicale_server(tmp_path_factory):
-    """An ephemeral, filesystem-backed Radicale instance for the whole test session.
-    Auth is disabled (any username/password accepted) — tests get per-test isolation
-    by using a fresh random username, not by restarting the server."""
-    storage = tmp_path_factory.mktemp("radicale-storage")
-    port = _free_port()
-    proc = subprocess.Popen(
-        [
-            sys.executable, "-m", "radicale",
-            f"--storage-filesystem-folder={storage}",
-            f"--server-hosts=127.0.0.1:{port}",
-            "--auth-type=none",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    base_url = f"http://127.0.0.1:{port}"
-    for _ in range(100):
-        try:
-            httpx.get(base_url, timeout=0.5)
-            break
-        except httpx.HTTPError:
-            time.sleep(0.1)
-    else:
-        proc.terminate()
-        raise RuntimeError("radicale did not start in time")
-
-    yield base_url
-
-    proc.terminate()
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-
-
-@pytest.fixture
-def radicale_user() -> str:
-    return f"test-{uuid.uuid4().hex[:8]}"
 
 
 class _FakeRemindersServer:
@@ -366,4 +321,107 @@ def calendar_server():
 
 @pytest.fixture
 def calendar_server_token() -> str:
+    return f"test-{uuid.uuid4().hex[:8]}"
+
+
+class _FakeContactsServer:
+    """Stands in for apple-contacts-server: implements the same wire contract (see
+    apple_contacts_server/http.py) over a plain in-memory dict instead of the
+    Contacts framework. Mirrors `_FakeRemindersServer`/`_FakeCalendarServer` above —
+    gateway's contacts_server/store.py is just an HTTP client. Unlike those two,
+    there's no LWW/tombstone contract to fake here (see apple-contacts-server's own
+    store.py docstring): writes are plain last-write-wins and deletes are real.
+    Storage is keyed by bearer token for per-test isolation via a fresh token,
+    without restarting the server."""
+
+    def __init__(self):
+        self._by_token: dict[str, dict[str, dict]] = {}
+
+    def _db(self, token: str) -> dict[str, dict]:
+        return self._by_token.setdefault(token, {})
+
+    def _authorized(self, request: Request) -> str | None:
+        header = request.headers.get("authorization", "")
+        if not header.startswith("Bearer "):
+            return None
+        return header[len("Bearer "):]
+
+    async def list_contacts(self, request: Request) -> JSONResponse:
+        token = self._authorized(request)
+        if not token:
+            return JSONResponse({"error": {"code": "unauthorized", "message": "missing bearer token"}}, status_code=401)
+        db = self._db(token)
+        results = sorted(db.values(), key=lambda c: c["name"].lower())
+        return JSONResponse({"contacts": results})
+
+    async def get_contact(self, request: Request) -> JSONResponse:
+        token = self._authorized(request)
+        if not token:
+            return JSONResponse({"error": {"code": "unauthorized", "message": "missing bearer token"}}, status_code=401)
+        db = self._db(token)
+        id = request.path_params["id"]
+        if id not in db:
+            return JSONResponse({"error": {"code": "not_found", "message": "no such contact"}}, status_code=404)
+        return JSONResponse(db[id])
+
+    async def put_contact(self, request: Request) -> JSONResponse:
+        token = self._authorized(request)
+        if not token:
+            return JSONResponse({"error": {"code": "unauthorized", "message": "missing bearer token"}}, status_code=401)
+        db = self._db(token)
+        body = await request.json()
+        body["id"] = request.path_params["id"]
+
+        if not (body.get("name") or "").strip():
+            return JSONResponse({"error": {"code": "validation_error", "message": "name is required and must be non-empty"}}, status_code=400)
+
+        db[body["id"]] = body
+        return JSONResponse(body)
+
+    async def delete_contact(self, request: Request) -> JSONResponse:
+        token = self._authorized(request)
+        if not token:
+            return JSONResponse({"error": {"code": "unauthorized", "message": "missing bearer token"}}, status_code=401)
+        db = self._db(token)
+        id = request.path_params["id"]
+        if id not in db:
+            return JSONResponse({"error": {"code": "not_found", "message": "no such contact"}}, status_code=404)
+        del db[id]
+        return JSONResponse({"status": "deleted", "id": id})
+
+    def app(self) -> Starlette:
+        return Starlette(routes=[
+            Route("/contacts", self.list_contacts, methods=["GET"]),
+            Route("/contacts/{id}", self.get_contact, methods=["GET"]),
+            Route("/contacts/{id}", self.put_contact, methods=["PUT"]),
+            Route("/contacts/{id}", self.delete_contact, methods=["DELETE"]),
+        ])
+
+
+@pytest.fixture(scope="session")
+def contacts_server():
+    """An in-process fake apple-contacts-server for the whole test session — see
+    `_FakeContactsServer` docstring. Per-test isolation comes from a fresh bearer
+    token (`contacts_server_token`), not from restarting the server."""
+    port = _free_port()
+    server = uvicorn.Server(uvicorn.Config(_FakeContactsServer().app(), host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    base_url = f"http://127.0.0.1:{port}"
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.05)
+    else:
+        raise RuntimeError("fake contacts server did not start in time")
+
+    yield base_url
+
+    server.should_exit = True
+    thread.join(timeout=5)
+
+
+@pytest.fixture
+def contacts_server_token() -> str:
     return f"test-{uuid.uuid4().hex[:8]}"

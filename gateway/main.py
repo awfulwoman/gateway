@@ -52,7 +52,7 @@ def create_server(config: Config) -> FastMCP:
     reminders.register(mcp)
     reminders_http.init(config.reminders)
 
-    contacts.init(config.radicale)
+    contacts.init(config.contacts_server)
     contacts.register(mcp)
 
     email.init(config.imap)
