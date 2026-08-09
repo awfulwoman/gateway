@@ -13,6 +13,13 @@ def init(config: CalendarServerConfig) -> None:
     store.init(config)
 
 
+def _has_time_component(value: str) -> bool:
+    """Whether an ISO 8601 date string names a time of day, rather than just a
+    date. Tested on the string instead of the parsed datetime because midnight is
+    indistinguishable from an unspecified time once parsed."""
+    return "T" in value or " " in value
+
+
 def _parse_period(period: str) -> tuple[datetime, datetime]:
     now = datetime.now(timezone.utc)
     if period == "today":
@@ -33,6 +40,12 @@ def _parse_period(period: str) -> tuple[datetime, datetime]:
         start_str, end_str = period.split(":", 1)
         start = datetime.fromisoformat(start_str)
         end = datetime.fromisoformat(end_str)
+        # A bare 'YYYY-MM-DD' end date parses to midnight at the *start* of that
+        # day, which would make the range end-exclusive: 'D:D' collapses to a
+        # zero-width window and 'A:D' silently drops everything on D. Snap it to
+        # end-of-day so the range is inclusive, matching today/tomorrow above.
+        if not _has_time_component(end_str):
+            end = end.replace(hour=23, minute=59, second=59, microsecond=0)
         if not start.tzinfo:
             start = start.astimezone()
         if not end.tzinfo:

@@ -20,6 +20,14 @@ def _at(days_from_now: int, hour: int = 9) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _local_date(days_from_now: int, hour: int = 9) -> str:
+    """The local calendar date an `_at(days_from_now, hour)` instant falls on.
+    Period ranges are interpreted in local time, so the date has to be derived
+    that way rather than from the UTC instant."""
+    dt = (datetime.now(timezone.utc) + timedelta(days=days_from_now)).replace(hour=hour, minute=0, second=0, microsecond=0)
+    return dt.astimezone().date().isoformat()
+
+
 # --- pure helpers ---
 
 @pytest.mark.parametrize("period", ["today", "tomorrow", "week", "month"])
@@ -32,6 +40,26 @@ def test_parse_period_custom_range():
     start, end = calendar._parse_period("2026-06-01:2026-06-10")
     assert start.date().isoformat() == "2026-06-01"
     assert end.date().isoformat() == "2026-06-10"
+
+
+def test_parse_period_custom_range_end_is_inclusive():
+    """A bare end date covers the whole of that day, so events on it aren't dropped."""
+    _, end = calendar._parse_period("2026-06-01:2026-06-10")
+    assert (end.hour, end.minute, end.second) == (23, 59, 59)
+
+
+def test_parse_period_single_day_range_spans_that_day():
+    """'D:D' must be a full day, not a zero-width window."""
+    start, end = calendar._parse_period("2026-06-01:2026-06-01")
+    assert start < end
+    assert start.astimezone().date().isoformat() == "2026-06-01"
+    assert (end.astimezone().hour, end.astimezone().minute) == (23, 59)
+
+
+def test_parse_period_custom_range_respects_explicit_end_time():
+    """An explicit time on the end date is honoured rather than widened to end-of-day."""
+    _, end = calendar._parse_period("2026-06-01:2026-06-10T12:00:00")
+    assert (end.hour, end.minute, end.second) == (12, 0, 0)
 
 
 def test_parse_period_invalid():
@@ -105,6 +133,21 @@ def test_list_calendar_events_sorted_by_start(cal):
     cal.create_calendar_event("Earlier", _at(5, hour=9), _at(5, hour=10))
     events = json.loads(cal.list_calendar_events("month"))
     assert [e["title"] for e in events] == ["Earlier", "Later"]
+
+
+def test_list_calendar_events_single_day_range_finds_that_days_events(cal):
+    """Regression: 'D:D' used to build a zero-width window and always return []."""
+    cal.create_calendar_event("Dentist", _at(5), _at(5, hour=10))
+    day = _local_date(5)
+    events = json.loads(cal.list_calendar_events(f"{day}:{day}"))
+    assert [e["title"] for e in events] == ["Dentist"]
+
+
+def test_list_calendar_events_range_includes_events_on_the_end_date(cal):
+    """Regression: the final day of a multi-day range used to be dropped."""
+    cal.create_calendar_event("Last day", _at(5), _at(5, hour=10))
+    events = json.loads(cal.list_calendar_events(f"{_local_date(1)}:{_local_date(5)}"))
+    assert [e["title"] for e in events] == ["Last day"]
 
 
 def test_search_calendar_events_matches_title_location_notes(cal):
