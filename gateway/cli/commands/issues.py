@@ -6,7 +6,7 @@ from gateway.cli import client, fmt
 
 @click.group()
 def group() -> None:
-    """Issues (Obsidian vault)."""
+    """Issues (GitHub issues repo, default awfulwoman/meta)."""
 
 
 @group.command("list")

@@ -1,8 +1,8 @@
 # Gateway Server + CLI tools
 
-MCP server providing Claude Code access to personal services: email, Calendar (backed by real Apple Calendar via [apple-calendar-server](https://github.com/awfulwoman/apple-calendar-server)), Contacts (backed by real macOS Contacts via [apple-contacts-server](https://github.com/awfulwoman/apple-contacts-server)), Reminders (backed by real Apple Reminders via [apple-reminders-server](https://github.com/awfulwoman/apple-reminders-server)), an Obsidian vault, and Karakeep bookmarks.
+MCP server providing Claude Code access to personal services: email, Calendar (backed by real Apple Calendar via [apple-calendar-server](https://github.com/awfulwoman/apple-calendar-server)), Contacts (backed by real macOS Contacts via [apple-contacts-server](https://github.com/awfulwoman/apple-contacts-server)), Reminders (backed by real Apple Reminders via [apple-reminders-server](https://github.com/awfulwoman/apple-reminders-server)), an Obsidian vault, Karakeep bookmarks, OwnTracks location, and issues (GitHub issues in the `awfulwoman/meta` repo).
 
-## Tools (44 total)
+## Tools (55 total)
 
 | Group | Tools |
 |---|---|
@@ -12,6 +12,8 @@ MCP server providing Claude Code access to personal services: email, Calendar (b
 | **Email** | `list_folders`, `list_emails`, `fetch_unread_emails`, `search_emails`, `fetch_email_body`, `mark_email_read` |
 | **Obsidian** | `list_notes`, `read_note`, `search_notes`, `create_note`, `update_note`, `append_to_note`, `move_note`, `delete_note` |
 | **Karakeep** | `search_bookmarks`, `get_bookmark`, `get_bookmark_content`, `create_bookmark`, `update_bookmark`, `attach_tags`, `detach_tags`, `list_tags`, `get_lists`, `create_list`, `add_to_list`, `remove_from_list` |
+| **OwnTracks** | `get_current_location`, `get_location_history`, `list_tracked_devices` |
+| **Issues** (GitHub `awfulwoman/meta`) | `list_issues`, `get_issue`, `create_issue`, `update_issue`, `delete_issue`, `add_issue_comment`, `add_checklist_item`, `toggle_checklist_item` |
 
 ## Setup
 
@@ -173,5 +175,7 @@ All config via environment variables (or `.env` file):
 | `GATEWAY_CALENDAR_SERVER__BEARER_TOKEN` | apple-calendar-server bearer token |
 | `GATEWAY_KARAKEEP__BASE_URL` | Karakeep instance URL |
 | `GATEWAY_KARAKEEP__API_KEY` | Karakeep API key |
+| `GATEWAY_GITHUB__REPO` | Repo holding issues (default `awfulwoman/meta`), reached via the GitHub REST API. |
+| `GATEWAY_GITHUB__TOKEN` | GitHub PAT with `Issues: Read and write` on that repo. |
 | `GATEWAY_SERVER__HOST` | SSE server bind address (default 127.0.0.1) |
 | `GATEWAY_SERVER__PORT` | SSE server port (default 4000) |

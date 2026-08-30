@@ -67,7 +67,7 @@ def create_server(config: Config) -> FastMCP:
     owntracks.init(config.owntracks)
     owntracks.register(mcp)
 
-    issues.init(config.obsidian)
+    issues.init(config.github)
     issues.register(mcp)
 
     return mcp

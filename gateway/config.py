@@ -18,6 +18,14 @@ class ObsidianConfig(BaseModel):
     vault_path: str = ""
 
 
+class GitHubConfig(BaseModel):
+    """Backs the issues tools, which call the GitHub REST API directly. `repo` is
+    owner/name; `token` is a PAT with issues read/write on that repo, supplied as
+    GATEWAY_GITHUB__TOKEN."""
+    repo: str = "awfulwoman/meta"
+    token: str = ""
+
+
 class CalendarServerConfig(BaseModel):
     """apple-calendar-server on Malcolm — real Apple Calendar via EventKit,
     replacing Google Calendar as gateway's calendar backend."""
@@ -96,6 +104,7 @@ class Config(BaseSettings):
 
     imap: IMAPConfig = IMAPConfig()
     obsidian: ObsidianConfig = ObsidianConfig()
+    github: GitHubConfig = GitHubConfig()
     calendar_server: CalendarServerConfig = CalendarServerConfig()
     karakeep: KarakeepConfig = KarakeepConfig()
     owntracks: OwnTracksConfig = OwnTracksConfig()
