@@ -86,12 +86,22 @@ class ContactsServerConfig(BaseModel):
 class ServerConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 4000
+    # Each entry is `label:secret` or a bare secret (see gateway.auth.parse_clients).
     auth_tokens: Annotated[list[str], NoDecode] = []
 
     @field_validator("auth_tokens", mode="before")
     @classmethod
     def _split_tokens(cls, v):
         return _split_csv(v)
+
+
+class UsageLogConfig(BaseModel):
+    """Per-request `/mcp` usage logging. Always writes to stdout (lines prefixed
+    `usage `); also appends pure JSONL to `path` when set, rotating it."""
+    enabled: bool = True
+    path: str = ""
+    max_bytes: int = 10_485_760
+    backups: int = 5
 
 
 class Config(BaseSettings):
@@ -113,3 +123,4 @@ class Config(BaseSettings):
     reminders_server: RemindersServerConfig = RemindersServerConfig()
     contacts_server: ContactsServerConfig = ContactsServerConfig()
     server: ServerConfig = ServerConfig()
+    usage_log: UsageLogConfig = UsageLogConfig()

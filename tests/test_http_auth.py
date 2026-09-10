@@ -45,6 +45,12 @@ def test_any_of_multiple_tokens_is_accepted():
     assert r.status_code == 200
 
 
+def test_labelled_entry_authorises_on_its_secret():
+    client = _make_client(["laptop:s3cr3t"])
+    assert client.get("/mcp", headers={"Authorization": "Bearer s3cr3t"}).status_code == 200
+    assert client.get("/mcp", headers={"Authorization": "Bearer laptop"}).status_code == 401
+
+
 def test_empty_tokens_disables_the_guard():
     client = _make_client([])
     r = client.get("/mcp")

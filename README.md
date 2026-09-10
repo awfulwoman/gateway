@@ -179,3 +179,24 @@ All config via environment variables (or `.env` file):
 | `GATEWAY_GITHUB__TOKEN` | GitHub PAT with `Issues: Read and write` on that repo. |
 | `GATEWAY_SERVER__HOST` | SSE server bind address (default 127.0.0.1) |
 | `GATEWAY_SERVER__PORT` | SSE server port (default 4000) |
+| `GATEWAY_SERVER__AUTH_TOKENS` | Comma-separated bearer tokens required on `/mcp`. Each entry is `label:secret` (label names the caller in the usage log); a bare `secret` gets an auto label. Unset = auth disabled (startup warning). |
+| `GATEWAY_USAGE_LOG__ENABLED` | Log one JSON line per `/mcp` request (default `true`). |
+| `GATEWAY_USAGE_LOG__PATH` | Also append pure JSONL to this rotating file (unset = stdout only). |
+| `GATEWAY_USAGE_LOG__MAX_BYTES` / `__BACKUPS` | Rotation size and kept-file count (defaults 10 MiB, 5). |
+
+## Usage logging
+
+Every `/mcp` request emits one structured line via the `gateway.usage` logger —
+to stdout prefixed `usage `, and to `GATEWAY_USAGE_LOG__PATH` as pure JSONL when
+set. `/v1/*` is not covered (it is slated for removal — see
+[issue #1](https://github.com/awfulwoman/gateway/issues/1)).
+
+```json
+{"ts":"2026-09-10T19:33:54.796984Z","caller":"laptop","ip":"127.0.0.1",
+ "ua":"claude-code/1.2","status":200,"duration_ms":9.4,
+ "method":"tools/call","tool":"list_notes","args":{"limit":3},"rpc_id":1}
+```
+
+`caller` is the label of the matched `GATEWAY_SERVER__AUTH_TOKENS` entry, or
+`null` for an unauthenticated / rejected request. `args` is the full tool
+arguments object. A JSON-RPC batch logs one line per sub-call.
