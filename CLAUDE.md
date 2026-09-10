@@ -7,4 +7,4 @@ Gateway is a human-in-the-loop interface, not an autonomous agent. Do not add au
 ## Calendar conventions
 
 - "CO" = Charlie O'Hara
-- "AC" = Annisa (Charlie's wife)
+- "AC" = Wifey (Charlie's wife)
