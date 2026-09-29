@@ -1,11 +1,48 @@
 # mail-archive-server — build handoff
 
 **Date:** 2026-09-04
-**Status:** Proposed — not yet started
+**Status:** Partly implemented, and superseded in places. Read §0 first.
 **Audience:** the agent/developer implementing this. This document is
 **self-contained**: it names every file to touch across three repositories, the
 exact wire contract, and the acceptance checks. You should not need to rediscover
 any of the findings in §2.
+
+---
+
+## 0. Status as of 2026-09-29
+
+Most of this document is built, but not always as written. Where this section
+and the rest of the document disagree, this section wins.
+
+| Section | Status |
+|---|---|
+| §4 mbsync fix | **Superseded.** `system-emailbackup` was retired on 2026-09-18 (infra `734069d6`). Sync moved into the service. |
+| §5 Multi-account backup | **Superseded.** Accounts are in `charlie_email_accounts` in infra (`personal`, `gmail_seuk`, `gmail_taw`, `gmail_se`, `shared`). The service syncs them itself; there is no backup role and no migration. |
+| §6 The service | **Built** in `awfulwoman/mail-archive-server`. It also owns IMAP sync: it runs mbsync per account on a timer (`MAIL_ARCHIVE_SYNC_INTERVAL_SECONDS`, hourly) and exposes `POST /sync`. |
+| §7 Infra | **Built and deployed** as a Docker composition, `composition-mail-archive-server`, not a systemd role. Data is at `fastpool/compositions/mail-archive-server` (ZFS policy `critical`). The old Maildir remains at `/slowpool/charlie/email` as a historical copy. |
+| §8 Gateway | **Not started.** Gateway still uses single-account direct IMAP. |
+
+### Decisions that change §8
+
+1. **Gateway holds no IMAP credentials.** The service is the only holder of mail
+   credentials. §8.1's `IMAPAccountConfig` / `imap_accounts` /
+   `imap_default_account`, and the matching `GATEWAY_IMAP_ACCOUNTS__*` template in
+   §7.4, are **dropped**. Gateway's only mail config is `MailArchiveServerConfig`.
+2. **Every email tool uses the archive**, including `fetch_unread_emails` and
+   `mark_email_read`. For current unread state, Gateway triggers an
+   account-scoped sync first. To mark a message read, the service sets the flag
+   in its own Maildir and syncs it back upstream. Both need new service endpoints:
+   `awfulwoman/mail-archive-server#1`.
+3. **No IMAP fallback.** With no credentials, Gateway has nothing to fall back to.
+   If the archive is unreachable, the tools return a clear error, never an empty
+   result. §8.3 "Graceful degradation", the `"source": "archive" | "imap"` field,
+   and acceptance item 20 are dropped.
+4. **Live and searchable are the same set.** Every archive account is both
+   searchable and markable, so the `searchable` / `live` split in §8.3 and
+   acceptance item 17 no longer applies. `list_email_accounts` reports the
+   archive's accounts and their sync health.
+5. **Paging uses a keyset cursor**, not `offset`: `awfulwoman/mail-archive-server#2`
+   and `awfulwoman/gateway#2`.
 
 ---
 
@@ -863,6 +900,10 @@ HTTP instead of a bind mount is the whole point of this design.
 ---
 
 ## 8. Gateway — `awfulwoman/gateway`
+
+> **Read §0 before this section.** The live-IMAP path below (per-account IMAP
+> credentials in Gateway, IMAP fallback, `searchable`/`live` split) was dropped on
+> 2026-09-29. Everything goes through the archive.
 
 ### 8.1 Config — the account model
 
