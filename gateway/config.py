@@ -7,11 +7,20 @@ def _split_csv(v):
     return [t.strip() for t in v.split(",") if t.strip()] if isinstance(v, str) else v
 
 
-class IMAPConfig(BaseModel):
-    host: str = "imap.mailbox.org"
-    port: int = 993
-    username: str = ""
-    password: str = ""
+class MailArchiveServerConfig(BaseModel):
+    """mail-archive-server — the sole holder of mail credentials; Gateway
+    holds none (handoff spec §0's decisions, superseding §8.1's original
+    per-account IMAPConfig design). `accounts` is an ergonomic filter only
+    (empty = every account the bearer token can see) — never a security
+    control, the token's own server-side scope is that."""
+    base_url: str = ""
+    bearer_token: str = ""
+    accounts: Annotated[list[str], NoDecode] = []
+
+    @field_validator("accounts", mode="before")
+    @classmethod
+    def _split_accounts(cls, v):
+        return _split_csv(v)
 
 
 class ObsidianConfig(BaseModel):
@@ -112,7 +121,7 @@ class Config(BaseSettings):
         env_file_encoding="utf-8",
     )
 
-    imap: IMAPConfig = IMAPConfig()
+    mail_archive_server: MailArchiveServerConfig = MailArchiveServerConfig()
     obsidian: ObsidianConfig = ObsidianConfig()
     github: GitHubConfig = GitHubConfig()
     calendar_server: CalendarServerConfig = CalendarServerConfig()

@@ -47,3 +47,24 @@ def test_contacts_server_config_from_env(monkeypatch):
     config = Config()
     assert config.contacts_server.base_url == "https://apple-contacts.internal"
     assert config.contacts_server.bearer_token == "secret"
+
+
+def test_mail_archive_server_config_from_env(monkeypatch):
+    monkeypatch.setenv("GATEWAY_MAIL_ARCHIVE_SERVER__BASE_URL", "https://mail-archive.internal")
+    monkeypatch.setenv("GATEWAY_MAIL_ARCHIVE_SERVER__BEARER_TOKEN", "secret")
+    config = Config()
+    assert config.mail_archive_server.base_url == "https://mail-archive.internal"
+    assert config.mail_archive_server.bearer_token == "secret"
+    assert config.mail_archive_server.accounts == []
+
+
+def test_mail_archive_server_accounts_split_from_env(monkeypatch):
+    monkeypatch.setenv("GATEWAY_MAIL_ARCHIVE_SERVER__ACCOUNTS", "personal, work")
+    config = Config()
+    assert config.mail_archive_server.accounts == ["personal", "work"]
+
+
+def test_imap_config_no_longer_exists():
+    import gateway.config as config_module
+    assert not hasattr(config_module, "IMAPConfig")
+    assert not hasattr(Config(), "imap")
