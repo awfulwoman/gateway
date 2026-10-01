@@ -425,3 +425,150 @@ def contacts_server():
 @pytest.fixture
 def contacts_server_token() -> str:
     return f"test-{uuid.uuid4().hex[:8]}"
+
+
+class _FakeMailArchiveServer:
+    """Stands in for mail-archive-server's real wire contract (verified
+    against its own http.py/store.py, not guessed): GET /messages (account,
+    seen, since, until, order, cursor, limit), GET /messages/{id}, POST
+    /messages/{id}/read, GET /accounts, POST /sync. Storage keyed by bearer
+    token for per-test isolation, mirroring `_FakeContactsServer`.
+
+    Messages are seeded directly (`seed()`), not synced from a real Maildir
+    -- gateway's own tools treat the archive as an opaque HTTP API, so this
+    only needs to be wire-compatible, not byte-for-byte reimplement the real
+    server's SQL. The cursor is a simple index-into-the-sorted-list token,
+    opaque to any caller exactly like the real one.
+    """
+
+    def __init__(self):
+        self._by_token: dict[str, list[dict]] = {}
+
+    def _db(self, token: str) -> list[dict]:
+        return self._by_token.setdefault(token, [])
+
+    def seed(self, token: str, messages: list[dict]) -> None:
+        self._db(token).extend(messages)
+
+    def _authorized(self, request: Request) -> str | None:
+        header = request.headers.get("authorization", "")
+        if not header.startswith("Bearer "):
+            return None
+        return header[len("Bearer "):]
+
+    async def get_messages(self, request: Request) -> JSONResponse:
+        token = self._authorized(request)
+        if not token:
+            return JSONResponse({"error": {"code": "unauthorized", "message": "missing bearer token"}}, status_code=401)
+
+        qp = request.query_params
+        rows = list(self._db(token))
+        accounts = qp.getlist("account")
+        if accounts:
+            rows = [m for m in rows if m["account"] in accounts]
+        seen = qp.get("seen")
+        if seen is not None:
+            rows = [m for m in rows if m["seen"] == (seen == "true")]
+        since = qp.get("since")
+        if since:
+            rows = [m for m in rows if m["date"] >= since]
+        until = qp.get("until")
+        if until:
+            rows = [m for m in rows if m["date"] <= until]
+
+        order = qp.get("order", "date_desc")
+        rows.sort(key=lambda m: (m["date"], m["id"]), reverse=(order == "date_desc"))
+
+        cursor = qp.get("cursor")
+        start = int(cursor) if cursor else 0
+        limit = int(qp.get("limit", "25"))
+        page = rows[start:start + limit]
+        next_cursor = str(start + limit) if start + limit < len(rows) else None
+
+        return JSONResponse({
+            "messages": page, "total": len(rows), "limit": limit, "offset": 0,
+            "next_cursor": next_cursor, "accounts_searched": accounts or sorted({m["account"] for m in rows}),
+            "index": {"last_indexed_at": "2026-01-01T00:00:00Z", "oldest_sync_at": "2026-01-01T00:00:00Z",
+                      "stale_seconds": 60},
+        })
+
+    async def get_message_detail(self, request: Request) -> JSONResponse:
+        token = self._authorized(request)
+        if not token:
+            return JSONResponse({"error": {"code": "unauthorized", "message": "missing bearer token"}}, status_code=401)
+        id_ = request.path_params["id"]
+        for m in self._db(token):
+            if m["id"] == id_:
+                return JSONResponse(m)
+        return JSONResponse({"error": {"code": "not_found", "message": "no such message"}}, status_code=404)
+
+    async def post_mark_read(self, request: Request) -> JSONResponse:
+        token = self._authorized(request)
+        if not token:
+            return JSONResponse({"error": {"code": "unauthorized", "message": "missing bearer token"}}, status_code=401)
+        id_ = request.path_params["id"]
+        for m in self._db(token):
+            if m["id"] == id_:
+                m["seen"] = True
+                return JSONResponse({"id": id_, "account": m["account"], "seen": True, "upstream_synced": False})
+        return JSONResponse({"error": {"code": "not_found", "message": "no such message"}}, status_code=404)
+
+    async def get_accounts(self, request: Request) -> JSONResponse:
+        token = self._authorized(request)
+        if not token:
+            return JSONResponse({"error": {"code": "unauthorized", "message": "missing bearer token"}}, status_code=401)
+        names = sorted({m["account"] for m in self._db(token)})
+        return JSONResponse({"accounts": [
+            {"name": n, "messages": sum(1 for m in self._db(token) if m["account"] == n),
+             "last_sync_attempt_at": "2026-01-01T00:00:00Z", "last_sync_ok": True}
+            for n in names
+        ]})
+
+    async def post_sync(self, request: Request) -> JSONResponse:
+        token = self._authorized(request)
+        if not token:
+            return JSONResponse({"error": {"code": "unauthorized", "message": "missing bearer token"}}, status_code=401)
+        account = request.query_params.get("account")
+        if account is not None and account not in {m["account"] for m in self._db(token)}:
+            return JSONResponse({"error": {"code": "unknown_account", "message": f"unknown account: {account}"}},
+                                 status_code=400)
+        return JSONResponse({"indexing": True}, status_code=202)
+
+    def app(self) -> Starlette:
+        return Starlette(routes=[
+            Route("/messages", self.get_messages, methods=["GET"]),
+            Route("/messages/{id}", self.get_message_detail, methods=["GET"]),
+            Route("/messages/{id}/read", self.post_mark_read, methods=["POST"]),
+            Route("/accounts", self.get_accounts, methods=["GET"]),
+            Route("/sync", self.post_sync, methods=["POST"]),
+        ])
+
+
+@pytest.fixture(scope="session")
+def mail_archive_server():
+    """An in-process fake mail-archive-server for the whole test session --
+    see `_FakeMailArchiveServer` docstring. Per-test isolation comes from a
+    fresh bearer token, not from restarting the server."""
+    port = _free_port()
+    fake = _FakeMailArchiveServer()
+    server = uvicorn.Server(uvicorn.Config(fake.app(), host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    base_url = f"http://127.0.0.1:{port}"
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.05)
+    else:
+        raise RuntimeError("fake mail archive server did not start in time")
+
+    yield base_url, fake
+
+    server.should_exit = True
+    thread.join(timeout=5)
+
+
+@pytest.fixture
+def mail_archive_server_token() -> str:
+    return f"test-{uuid.uuid4().hex[:8]}"
