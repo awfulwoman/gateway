@@ -76,14 +76,37 @@ def test_contacts():
 # --- email ---
 
 def test_emails_empty():
-    assert fmt.emails([]) == "No emails."
+    assert fmt.emails({"messages": [], "next_cursor": None}) == "No emails."
 
 
 def test_emails():
-    data = [{"message_id": "<abc@x>", "from": "bob@example.com", "to": "me@x.com", "subject": "Hello there", "date": "Sun, 07 Jun 2026 10:00:00"}]
+    data = {"messages": [{"id": "m1", "account": "personal", "from": "bob@example.com", "to": "me@x.com",
+                           "subject": "Hello there", "date": "2026-06-07T10:00:00Z"}], "next_cursor": None}
     out = fmt.emails(data)
     assert "bob@example.com" in out
     assert "Hello there" in out
+
+
+def test_emails_shows_account_column_only_when_more_than_one_is_present():
+    one_account = {"messages": [
+        {"id": "m1", "account": "personal", "from": "a@x.com", "subject": "A", "date": "2026-06-07T10:00:00Z"},
+        {"id": "m2", "account": "personal", "from": "b@x.com", "subject": "B", "date": "2026-06-08T10:00:00Z"},
+    ], "next_cursor": None}
+    assert "[personal]" not in fmt.emails(one_account)
+
+    two_accounts = {"messages": [
+        {"id": "m1", "account": "personal", "from": "a@x.com", "subject": "A", "date": "2026-06-07T10:00:00Z"},
+        {"id": "m2", "account": "work", "from": "b@x.com", "subject": "B", "date": "2026-06-08T10:00:00Z"},
+    ], "next_cursor": None}
+    out = fmt.emails(two_accounts)
+    assert "[personal]" in out
+    assert "[work]" in out
+
+
+def test_emails_shows_a_cursor_hint_when_more_pages_remain():
+    data = {"messages": [{"id": "m1", "account": "personal", "from": "a@x.com", "subject": "A",
+                           "date": "2026-06-07T10:00:00Z"}], "next_cursor": "abc123"}
+    assert "abc123" in fmt.emails(data)
 
 
 def test_email_body():
@@ -199,19 +222,6 @@ def test_reminder_lists():
     out = fmt.reminder_lists(data)
     assert "Shopping" in out
     assert "Work" in out
-
-
-# --- folders ---
-
-def test_folders_empty():
-    assert fmt.folders([]) == "No folders."
-
-
-def test_folders():
-    data = ["INBOX", "Sent", "Drafts"]
-    out = fmt.folders(data)
-    assert "INBOX" in out
-    assert "Sent" in out
 
 
 # --- bookmark_detail ---

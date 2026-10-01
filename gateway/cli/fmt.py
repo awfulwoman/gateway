@@ -60,15 +60,20 @@ def contacts(data: list) -> str:
     return "\n".join(lines).rstrip()
 
 
-def emails(data: list) -> str:
-    if not data:
+def emails(data: dict) -> str:
+    messages = data.get("messages", [])
+    if not messages:
         return "No emails."
+    multi_account = len({m.get("account") for m in messages}) > 1
     lines = []
-    for e in data:
+    for e in messages:
         frm = (e.get("from") or "")[:35]
         subj = (e.get("subject") or "")[:55]
         date = (e.get("date") or "")[:16]
-        lines.append(f"{date}  {frm:<35}  {subj}")
+        acct = f"[{e.get('account')}] " if multi_account else ""
+        lines.append(f"{date}  {acct}{frm:<35}  {subj}")
+    if data.get("next_cursor"):
+        lines.append(f"\n(more: --cursor {data['next_cursor']})")
     return "\n".join(lines)
 
 
@@ -81,10 +86,6 @@ def email_body(data: dict) -> str:
         "",
         data.get("body") or data.get("body_preview", ""),
     ])
-
-
-def folders(data: list) -> str:
-    return "\n".join(data) if data else "No folders."
 
 
 def notes(data: list) -> str:
