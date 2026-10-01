@@ -47,9 +47,8 @@ def test_mark_read(mas):
     assert result["upstream_synced"] is False
 
 
-def test_mark_read_not_found_raises(mas):
-    with pytest.raises(store.MailArchiveError):
-        mas.mark_read("doesnotexist")
+def test_mark_read_not_found_returns_none(mas):
+    assert mas.mark_read("doesnotexist") is None
 
 
 def test_accounts(mas):

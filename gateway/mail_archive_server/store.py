@@ -77,11 +77,13 @@ def get_message(id: str) -> dict | None:
     return resp.json()
 
 
-def mark_read(id: str) -> dict:
+def mark_read(id: str) -> dict | None:
     try:
         resp = _client.post(f"/messages/{id}/read")
     except httpx.HTTPError as exc:
         raise MailArchiveError(f"could not reach mail-archive-server: {exc}") from exc
+    if resp.status_code == 404:
+        return None
     if resp.status_code != 200:
         raise MailArchiveError(_error_message(resp))
     return resp.json()

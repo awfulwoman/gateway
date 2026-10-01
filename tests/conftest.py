@@ -443,12 +443,17 @@ class _FakeMailArchiveServer:
 
     def __init__(self):
         self._by_token: dict[str, list[dict]] = {}
+        self.sync_calls: list[str | None] = []
 
     def _db(self, token: str) -> list[dict]:
         return self._by_token.setdefault(token, [])
 
     def seed(self, token: str, messages: list[dict]) -> None:
-        self._db(token).extend(messages)
+        # Copy each dict -- post_mark_read mutates its stored message
+        # in place (`m["seen"] = True`), and callers often seed from a
+        # shared module-level constant; without a copy, one test's
+        # mark-read would silently corrupt every other test's fixture data.
+        self._db(token).extend(dict(m) for m in messages)
 
     def _authorized(self, request: Request) -> str | None:
         header = request.headers.get("authorization", "")
@@ -532,6 +537,7 @@ class _FakeMailArchiveServer:
         if account is not None and account not in {m["account"] for m in self._db(token)}:
             return JSONResponse({"error": {"code": "unknown_account", "message": f"unknown account: {account}"}},
                                  status_code=400)
+        self.sync_calls.append(account)
         return JSONResponse({"indexing": True}, status_code=202)
 
     def app(self) -> Starlette:

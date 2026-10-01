@@ -89,7 +89,7 @@ def create_server(config: Config) -> FastMCP:
     contacts.init(config.contacts_server)
     contacts.register(mcp)
 
-    email.init(config.imap)
+    email.init(config.mail_archive_server)
     email.register(mcp)
 
     obsidian.init(config.obsidian)
