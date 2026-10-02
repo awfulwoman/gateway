@@ -70,15 +70,18 @@ def get_bookmark_content(bookmark_id: str) -> str:
     content = data.get("content", {})
     btype = content.get("type")
     if btype == "link":
-        text = content.get("htmlContent", "")
+        # Karakeep returns "htmlContent": null for a link it hasn't
+        # crawled (yet, or at all) -- the key is present, so `.get(...,
+        # "")`'s default never kicks in; coalesce explicitly instead.
+        text = content.get("htmlContent") or ""
         # Strip HTML tags naively so we don't need an extra dependency
         import re
         text = re.sub(r"<[^>]+>", " ", text)
         text = re.sub(r"\s+", " ", text).strip()
     elif btype == "text":
-        text = content.get("text", "")
+        text = content.get("text") or ""
     else:
-        text = content.get("content", "")
+        text = content.get("content") or ""
     return json.dumps({"id": bookmark_id, "type": btype, "content": text})
 
 

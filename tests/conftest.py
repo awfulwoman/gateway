@@ -133,6 +133,63 @@ class _FakeRemindersServer:
         ])
 
 
+class _FakeKarakeepServer:
+    """Stands in for Karakeep's real API (gateway/tools/karakeep.py's only
+    caller): one bookmark per id, keyed by bearer token so each test gets
+    isolation without restarting the server."""
+
+    def __init__(self):
+        self._by_token: dict[str, dict[str, dict]] = {}
+
+    def _db(self, token: str) -> dict[str, dict]:
+        return self._by_token.setdefault(token, {})
+
+    def seed(self, token: str, bookmark_id: str, bookmark: dict) -> None:
+        self._db(token)[bookmark_id] = bookmark
+
+    async def get_bookmark(self, request: Request) -> JSONResponse:
+        token = request.headers.get("authorization", "")[len("Bearer "):]
+        bookmark = self._db(token).get(request.path_params["id"])
+        if bookmark is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        return JSONResponse(bookmark)
+
+    def app(self) -> Starlette:
+        return Starlette(routes=[
+            Route("/api/v1/bookmarks/{id}", self.get_bookmark, methods=["GET"]),
+        ])
+
+
+@pytest.fixture(scope="session")
+def karakeep_server():
+    """An in-process fake Karakeep for the whole test session — see
+    `_FakeKarakeepServer` docstring. Per-test isolation comes from a fresh
+    bearer token, not from restarting the server."""
+    port = _free_port()
+    fake = _FakeKarakeepServer()
+    server = uvicorn.Server(uvicorn.Config(fake.app(), host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    base_url = f"http://127.0.0.1:{port}"
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.05)
+    else:
+        raise RuntimeError("fake karakeep server did not start in time")
+
+    yield base_url, fake
+
+    server.should_exit = True
+    thread.join(timeout=5)
+
+
+@pytest.fixture
+def karakeep_server_token() -> str:
+    return f"test-{uuid.uuid4().hex[:8]}"
+
+
 @pytest.fixture(scope="session")
 def reminders_server():
     """An in-process fake apple-reminders-server for the whole test session — see
