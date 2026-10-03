@@ -7,7 +7,7 @@ import pytest
 import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import Route
 from gateway.reminders.store import now_after, now_utc
 
@@ -187,6 +187,104 @@ def karakeep_server():
 
 @pytest.fixture
 def karakeep_server_token() -> str:
+    return f"test-{uuid.uuid4().hex[:8]}"
+
+
+class _FakeGitHubRepos:
+    """The read-only slice of the GitHub REST API gateway/tools/repos.py
+    calls: the owner's repo list (paginated), one repo's metadata, its
+    README and CLAUDE.md as raw text, recent commits, and open issues
+    (which, as on real GitHub, include pull requests). Keyed by bearer
+    token so each test seeds its own repos without restarting the server.
+    """
+
+    def __init__(self):
+        self._by_token: dict[str, dict[str, dict]] = {}
+
+    def _db(self, request: Request) -> dict[str, dict]:
+        token = request.headers.get("authorization", "")[len("Bearer "):]
+        return self._by_token.setdefault(token, {})
+
+    def seed(self, token: str, name: str, *, description: str = "", private: bool = False,
+             fork: bool = False, archived: bool = False, pushed_at: str = "2026-10-01T00:00:00Z",
+             topics: list[str] | None = None, readme: str | None = None, claude_md: str | None = None,
+             commits: list[dict] | None = None, issues: list[dict] | None = None) -> None:
+        self._by_token.setdefault(token, {})[name] = {
+            "meta": {"name": name, "description": description, "private": private, "fork": fork,
+                     "archived": archived, "pushed_at": pushed_at, "topics": topics or []},
+            "readme": readme, "claude_md": claude_md,
+            "commits": commits or [], "issues": issues or [],
+        }
+
+    async def list_repos(self, request: Request) -> JSONResponse:
+        per_page = int(request.query_params.get("per_page", 30))
+        page = int(request.query_params.get("page", 1))
+        repos = [r["meta"] for r in self._db(request).values()]
+        return JSONResponse(repos[(page - 1) * per_page: page * per_page])
+
+    def _repo(self, request: Request) -> dict | None:
+        return self._db(request).get(request.path_params["repo"])
+
+    async def get_repo(self, request: Request) -> JSONResponse:
+        repo = self._repo(request)
+        return JSONResponse(repo["meta"]) if repo else JSONResponse({"message": "Not Found"}, status_code=404)
+
+    async def readme(self, request: Request):
+        repo = self._repo(request)
+        if not repo or repo["readme"] is None:
+            return JSONResponse({"message": "Not Found"}, status_code=404)
+        return PlainTextResponse(repo["readme"])
+
+    async def contents(self, request: Request):
+        repo = self._repo(request)
+        if not repo or request.path_params["path"] != "CLAUDE.md" or repo["claude_md"] is None:
+            return JSONResponse({"message": "Not Found"}, status_code=404)
+        return PlainTextResponse(repo["claude_md"])
+
+    async def commits(self, request: Request) -> JSONResponse:
+        repo = self._repo(request)
+        per_page = int(request.query_params.get("per_page", 30))
+        return JSONResponse((repo["commits"] if repo else [])[:per_page])
+
+    async def issues(self, request: Request) -> JSONResponse:
+        repo = self._repo(request)
+        return JSONResponse([i for i in (repo["issues"] if repo else []) if i.get("state", "open") == "open"])
+
+    def app(self) -> Starlette:
+        return Starlette(routes=[
+            Route("/user/repos", self.list_repos, methods=["GET"]),
+            Route("/repos/{owner}/{repo}", self.get_repo, methods=["GET"]),
+            Route("/repos/{owner}/{repo}/readme", self.readme, methods=["GET"]),
+            Route("/repos/{owner}/{repo}/contents/{path:path}", self.contents, methods=["GET"]),
+            Route("/repos/{owner}/{repo}/commits", self.commits, methods=["GET"]),
+            Route("/repos/{owner}/{repo}/issues", self.issues, methods=["GET"]),
+        ])
+
+
+@pytest.fixture(scope="session")
+def github_repos_server():
+    port = _free_port()
+    fake = _FakeGitHubRepos()
+    server = uvicorn.Server(uvicorn.Config(fake.app(), host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    base_url = f"http://127.0.0.1:{port}"
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.05)
+    else:
+        raise RuntimeError("fake github server did not start in time")
+
+    yield base_url, fake
+
+    server.should_exit = True
+    thread.join(timeout=5)
+
+
+@pytest.fixture
+def github_token() -> str:
     return f"test-{uuid.uuid4().hex[:8]}"
 
 
