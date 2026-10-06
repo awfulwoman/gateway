@@ -733,3 +733,121 @@ def mail_archive_server():
 @pytest.fixture
 def mail_archive_server_token() -> str:
     return f"test-{uuid.uuid4().hex[:8]}"
+
+
+class _FakeEbay:
+    """The slice of eBay's REST API gateway/tools/ebay.py calls: the
+    client-credentials token endpoint, Browse's get_item_by_legacy_id and
+    item_summary/search, plus a stand-in for the ebay.io short-link
+    redirector. Keyed by client_id (one per test) so each test seeds its own
+    items and counts its own token requests without restarting the server.
+    """
+
+    def __init__(self):
+        self._by_client: dict[str, dict] = {}
+        self._tokens: dict[str, str] = {}  # access token -> client_id
+        self.short_links: dict[str, str] = {}
+
+    def client(self, client_id: str) -> dict:
+        return self._by_client.setdefault(
+            client_id, {"items": {}, "summaries": [], "token_requests": 0, "requests": []}
+        )
+
+    def seed_item(self, client_id: str, legacy_id: str, item: dict, variation_id: str = "") -> None:
+        self.client(client_id)["items"][(legacy_id, variation_id)] = item
+
+    def seed_summaries(self, client_id: str, summaries: list[dict]) -> None:
+        self.client(client_id)["summaries"] = summaries
+
+    async def token(self, request: Request) -> JSONResponse:
+        import base64
+        header = request.headers.get("authorization", "")
+        if not header.startswith("Basic "):
+            return JSONResponse({"error": "invalid_client"}, status_code=401)
+        client_id, _, secret = base64.b64decode(header[len("Basic "):]).decode().partition(":")
+        form = await request.form()
+        if secret != "secret" or form.get("grant_type") != "client_credentials" \
+                or form.get("scope") != "https://api.ebay.com/oauth/api_scope":
+            return JSONResponse({"error": "invalid_client"}, status_code=401)
+        self.client(client_id)["token_requests"] += 1
+        access = f"tok-{uuid.uuid4().hex[:8]}"
+        self._tokens[access] = client_id
+        return JSONResponse({"access_token": access, "expires_in": 7200, "token_type": "Application Access Token"})
+
+    def _authed(self, request: Request) -> dict | None:
+        client_id = self._tokens.get(request.headers.get("authorization", "")[len("Bearer "):])
+        if client_id is None:
+            return None
+        db = self.client(client_id)
+        db["requests"].append({
+            "path": request.url.path,
+            "params": dict(request.query_params),
+            "marketplace": request.headers.get("x-ebay-c-marketplace-id"),
+        })
+        return db
+
+    async def get_item_by_legacy_id(self, request: Request) -> JSONResponse:
+        db = self._authed(request)
+        if db is None:
+            return JSONResponse({"errors": [{"errorId": 1001, "message": "Invalid access token"}]}, status_code=401)
+        key = (request.query_params.get("legacy_item_id", ""), request.query_params.get("legacy_variation_id", ""))
+        item = db["items"].get(key)
+        if item is None:
+            return JSONResponse(
+                {"errors": [{"errorId": 11001, "message": "The specified item Id was not found."}]},
+                status_code=404,
+            )
+        return JSONResponse(item)
+
+    async def search(self, request: Request) -> JSONResponse:
+        db = self._authed(request)
+        if db is None:
+            return JSONResponse({"errors": [{"errorId": 1001, "message": "Invalid access token"}]}, status_code=401)
+        q = request.query_params.get("q", "").lower()
+        limit = int(request.query_params.get("limit", 50))
+        offset = int(request.query_params.get("offset", 0))
+        hits = [s for s in db["summaries"] if q in s.get("title", "").lower()]
+        return JSONResponse({"total": len(hits), "limit": limit, "offset": offset,
+                             "itemSummaries": hits[offset:offset + limit]})
+
+    async def short_link(self, request: Request):
+        from starlette.responses import RedirectResponse
+        target = self.short_links.get(request.path_params["code"])
+        if target is None:
+            return PlainTextResponse("not found", status_code=404)
+        return RedirectResponse(target, status_code=301)
+
+    def app(self) -> Starlette:
+        return Starlette(routes=[
+            Route("/identity/v1/oauth2/token", self.token, methods=["POST"]),
+            Route("/buy/browse/v1/item/get_item_by_legacy_id", self.get_item_by_legacy_id, methods=["GET"]),
+            Route("/buy/browse/v1/item_summary/search", self.search, methods=["GET"]),
+            Route("/m/{code}", self.short_link, methods=["GET", "HEAD"]),
+        ])
+
+
+@pytest.fixture(scope="session")
+def ebay_server():
+    port = _free_port()
+    fake = _FakeEbay()
+    server = uvicorn.Server(uvicorn.Config(fake.app(), host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    base_url = f"http://127.0.0.1:{port}"
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.05)
+    else:
+        raise RuntimeError("fake ebay server did not start in time")
+
+    yield base_url, fake
+
+    server.should_exit = True
+    thread.join(timeout=5)
+
+
+@pytest.fixture
+def ebay_client_id() -> str:
+    return f"test-{uuid.uuid4().hex[:8]}"

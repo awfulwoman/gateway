@@ -234,3 +234,44 @@ def devices(data: list) -> str:
         devs = ", ".join(d.get("devices", []))
         lines.append(f"{d['user']}: {devs}" if devs else d["user"])
     return "\n".join(lines)
+
+
+def _ebay_price(i: dict) -> str:
+    if i.get("current_bid"):
+        return f"{i['current_bid']} ({i.get('bid_count') or 0} bids, ends {(i.get('end_date') or '')[:16]})"
+    return i.get("price") or ""
+
+
+def ebay_listing(i: dict) -> str:
+    lines = [i.get("title") or "", f"  Price:     {_ebay_price(i)}  [{', '.join(i.get('buying_options', []))}]"]
+    if i.get("condition"):
+        cond = i["condition"] + (f" — {i['condition_description']}" if i.get("condition_description") else "")
+        lines.append(f"  Condition: {cond}")
+    if i.get("seller"):
+        s = i["seller"]
+        lines.append(f"  Seller:    {s['username']} ({s.get('feedback_score')}, {s.get('feedback_percentage')}%)")
+    if i.get("location"):
+        lines.append(f"  Location:  {i['location']}")
+    for o in i.get("shipping", []):
+        dates = "–".join(d for d in (o.get("min_delivery"), o.get("max_delivery")) if d)
+        lines.append(f"  Shipping:  {o.get('cost') or '?'} {o.get('type') or ''} {dates}".rstrip())
+    if i.get("returns"):
+        lines.append(f"  Returns:   {i['returns']}")
+    lines.append(f"  URL:       {i.get('url')}")
+    for k, v in (i.get("item_specifics") or {}).items():
+        lines.append(f"    {k}: {v}")
+    if i.get("description"):
+        lines += ["", i["description"]]
+    return "\n".join(lines)
+
+
+def ebay_search(data: dict) -> str:
+    items = data.get("items", [])
+    if not items:
+        return "No listings."
+    lines = [f"{data.get('total', len(items))} results"]
+    for i in items:
+        ship = f" + {i['shipping_cost']}" if i.get("shipping_cost") else ""
+        lines.append(f"{i.get('legacy_item_id')}  {i.get('title')}")
+        lines.append(f"       {_ebay_price(i)}{ship}  {i.get('condition') or ''}  {i.get('location') or ''}".rstrip())
+    return "\n".join(lines)

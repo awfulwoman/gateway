@@ -1,8 +1,8 @@
 # Gateway Server + CLI tools
 
-MCP server providing Claude Code access to personal services: email, Calendar (backed by real Apple Calendar via [apple-calendar-server](https://github.com/awfulwoman/apple-calendar-server)), Contacts (backed by real macOS Contacts via [apple-contacts-server](https://github.com/awfulwoman/apple-contacts-server)), Reminders (backed by real Apple Reminders via [apple-reminders-server](https://github.com/awfulwoman/apple-reminders-server)), an Obsidian vault, Karakeep bookmarks, OwnTracks location, and issues (GitHub issues in the `awfulwoman/meta` repo).
+MCP server providing Claude Code access to personal services: email, Calendar (backed by real Apple Calendar via [apple-calendar-server](https://github.com/awfulwoman/apple-calendar-server)), Contacts (backed by real macOS Contacts via [apple-contacts-server](https://github.com/awfulwoman/apple-contacts-server)), Reminders (backed by real Apple Reminders via [apple-reminders-server](https://github.com/awfulwoman/apple-reminders-server)), an Obsidian vault, Karakeep bookmarks, OwnTracks location, issues (GitHub issues in the `awfulwoman/meta` repo), and eBay listings (read-only, via eBay's Browse API).
 
-## Tools (55 total)
+## Tools (57 total)
 
 | Group | Tools |
 |---|---|
@@ -14,6 +14,7 @@ MCP server providing Claude Code access to personal services: email, Calendar (b
 | **Karakeep** | `search_bookmarks`, `get_bookmark`, `get_bookmark_content`, `create_bookmark`, `update_bookmark`, `attach_tags`, `detach_tags`, `list_tags`, `get_lists`, `create_list`, `add_to_list`, `remove_from_list` |
 | **OwnTracks** | `get_current_location`, `get_location_history`, `list_tracked_devices` |
 | **Issues** (GitHub `awfulwoman/meta`) | `list_issues`, `get_issue`, `create_issue`, `update_issue`, `delete_issue`, `add_issue_comment`, `add_checklist_item`, `toggle_checklist_item` |
+| **eBay** (Browse API, read-only) | `get_ebay_listing`, `search_ebay` |
 
 ## Setup
 

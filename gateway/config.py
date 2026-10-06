@@ -42,6 +42,17 @@ class CalendarServerConfig(BaseModel):
     bearer_token: str = ""
 
 
+class EbayConfig(BaseModel):
+    """Backs the eBay tools, which call eBay's Browse API directly with an
+    application (client-credentials) token — no eBay user login involved.
+    Keys come from a production keyset at developer.ebay.com. `marketplace`
+    is used when the input carries no domain to infer one from (a bare item
+    ID, or a search)."""
+    client_id: str = ""
+    client_secret: str = ""
+    marketplace: str = "EBAY_DE"
+
+
 class KarakeepConfig(BaseModel):
     base_url: str = ""
     api_key: str = ""
@@ -126,6 +137,7 @@ class Config(BaseSettings):
     github: GitHubConfig = GitHubConfig()
     calendar_server: CalendarServerConfig = CalendarServerConfig()
     karakeep: KarakeepConfig = KarakeepConfig()
+    ebay: EbayConfig = EbayConfig()
     owntracks: OwnTracksConfig = OwnTracksConfig()
     reminders: RemindersConfig = RemindersConfig()
     radicale: RadicaleConfig = RadicaleConfig()
