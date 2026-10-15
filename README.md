@@ -178,6 +178,8 @@ All config via environment variables (or `.env` file):
 | `GATEWAY_KARAKEEP__API_KEY` | Karakeep API key |
 | `GATEWAY_GITHUB__REPO` | Repo holding issues (default `awfulwoman/meta`), reached via the GitHub REST API. |
 | `GATEWAY_GITHUB__TOKEN` | GitHub PAT with `Issues: Read and write` on that repo. |
+| `GATEWAY_MICROPUB__BASE_URL` | micropub-server URL (`https://indie.awfulwoman.com`), for the draft-post tools |
+| `GATEWAY_MICROPUB__TOKEN` | micropub-server access token with scopes `draft update media` and no `delete` (make it with `micropub-server token --scope "draft update media"`), so agents can only create and edit drafts |
 | `GATEWAY_SERVER__HOST` | SSE server bind address (default 127.0.0.1) |
 | `GATEWAY_SERVER__PORT` | SSE server port (default 4000) |
 | `GATEWAY_SERVER__AUTH_TOKENS` | Comma-separated bearer tokens required on `/mcp`. Each entry is `label:secret` (label names the caller in the usage log); a bare `secret` gets an auto label. Unset = auth disabled (startup warning). |

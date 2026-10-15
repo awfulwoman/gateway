@@ -11,7 +11,7 @@ from gateway import auth
 from gateway.config import Config
 from gateway.http_auth import BearerAuthMiddleware
 from gateway.reminders import http as reminders_http
-from gateway.tools import calendar, contacts, reminders, email, obsidian, karakeep, owntracks, issues, repos, ebay
+from gateway.tools import calendar, contacts, reminders, email, obsidian, karakeep, owntracks, issues, repos, ebay, micropub
 from gateway.usage import UsageLogMiddleware
 
 logger = logging.getLogger("gateway")
@@ -109,6 +109,9 @@ def create_server(config: Config) -> FastMCP:
 
     ebay.init(config.ebay)
     ebay.register(mcp)
+
+    micropub.init(config.micropub)
+    micropub.register(mcp)
 
     return mcp
 

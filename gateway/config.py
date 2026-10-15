@@ -58,6 +58,13 @@ class KarakeepConfig(BaseModel):
     api_key: str = ""
 
 
+class MicropubConfig(BaseModel):
+    """micropub-server (indie.awfulwoman.com). The token needs the `draft update media`
+    scopes and not `delete`, so agents can only create and edit drafts."""
+    base_url: str = ""
+    token: str = ""
+
+
 class OwnTracksConfig(BaseModel):
     base_url: str = ""
     username: str = ""
@@ -138,6 +145,7 @@ class Config(BaseSettings):
     calendar_server: CalendarServerConfig = CalendarServerConfig()
     karakeep: KarakeepConfig = KarakeepConfig()
     ebay: EbayConfig = EbayConfig()
+    micropub: MicropubConfig = MicropubConfig()
     owntracks: OwnTracksConfig = OwnTracksConfig()
     reminders: RemindersConfig = RemindersConfig()
     radicale: RadicaleConfig = RadicaleConfig()
