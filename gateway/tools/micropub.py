@@ -20,8 +20,8 @@ _config: MicropubConfig | None = None
 _transport: httpx.BaseTransport | None = None
 
 # Post types the site defines (data/micropub.yaml). Anything else is a typo.
-POST_TYPES = ("note", "article", "bookmark", "like", "reply", "repost", "quote", "photo", "checkin", "bandname")
-_BANDNAMES_CHANNEL = "bandnames"
+POST_TYPES = ("note", "article", "bookmark", "like", "reply", "repost", "quote", "photo", "checkin", "page")
+_PAGES_CHANNEL = "pages"
 
 
 def init(config: MicropubConfig, transport: httpx.BaseTransport | None = None) -> None:
@@ -75,17 +75,17 @@ def _edit_link(c: httpx.Client, url: str) -> str | None:
 def create_post(post_type: str, properties: dict) -> str:
     """Create a draft post on the owner's site. It is always a draft: the owner publishes it from the edit link.
 
-    post_type: note, article, bookmark, like, reply, repost, quote, photo, checkin or bandname.
+    post_type: note, article, bookmark, like, reply, repost, quote, photo, checkin or page.
     properties: Micropub properties, e.g. {"name": "...", "content": "..."}. Link types take
     bookmark-of, like-of, in-reply-to, repost-of or quotation-of (a URL). photo takes photo (a URL
     from upload_media) and mp-photo-alt. checkin takes {"name": ..., "latitude": ..., "longitude": ...}.
-    category is a list of tags. A bandname needs only name.
+    category is a list of tags. A page (served at /<slug>/, from its name) needs name and content.
     Returns the post's URL and the web UI link to edit and publish it."""
     if post_type not in POST_TYPES:
         return json.dumps({"error": f"Unknown post type {post_type!r}; use one of {', '.join(POST_TYPES)}"})
     props = dict(properties)
-    if post_type == "bandname":
-        props["mp-channel"] = _BANDNAMES_CHANNEL
+    if post_type == "page":
+        props["mp-channel"] = _PAGES_CHANNEL
     body = {"type": ["h-entry"], "properties": {k: _mf2_value(k, v) for k, v in props.items()}}
     with _client() as c:
         r = c.post("/micropub", json=body)

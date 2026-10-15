@@ -56,10 +56,14 @@ def test_create_post_sends_mf2_json_and_returns_urls(fake):
     assert out == {"url": POST_URL, "status": "draft", "edit_url": f"{BASE}/posts/abc-123/edit"}
 
 
-def test_bandname_goes_to_its_channel(fake):
-    micropub.create_post("bandname", {"name": "The Tall Dwarves"})
+def test_page_goes_to_its_channel(fake):
+    micropub.create_post("page", {"name": "Uses", "content": "My kit."})
 
-    assert fake.sent()["properties"]["mp-channel"] == ["bandnames"]
+    assert fake.sent()["properties"]["mp-channel"] == ["pages"]
+
+
+def test_bandname_is_no_longer_a_type(fake):
+    assert "Unknown post type" in json.loads(micropub.create_post("bandname", {"name": "x"}))["error"]
 
 
 def test_checkin_becomes_an_h_card(fake):
