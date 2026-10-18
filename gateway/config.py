@@ -65,6 +65,13 @@ class MicropubConfig(BaseModel):
     token: str = ""
 
 
+class WebmentionsConfig(BaseModel):
+    """webmention-server (webmention.awfulwoman.com). The token is its admin API token. The tools
+    only use the review and send calls, never the rules or deletion."""
+    base_url: str = ""
+    token: str = ""
+
+
 class OwnTracksConfig(BaseModel):
     base_url: str = ""
     username: str = ""
@@ -146,6 +153,7 @@ class Config(BaseSettings):
     karakeep: KarakeepConfig = KarakeepConfig()
     ebay: EbayConfig = EbayConfig()
     micropub: MicropubConfig = MicropubConfig()
+    webmentions: WebmentionsConfig = WebmentionsConfig()
     owntracks: OwnTracksConfig = OwnTracksConfig()
     reminders: RemindersConfig = RemindersConfig()
     radicale: RadicaleConfig = RadicaleConfig()
