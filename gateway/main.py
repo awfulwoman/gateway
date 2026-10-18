@@ -6,6 +6,7 @@ from logging.handlers import RotatingFileHandler
 import anyio
 import uvicorn
 from starlette.requests import ClientDisconnect
+from starlette.responses import PlainTextResponse
 from mcp.server.fastmcp import FastMCP
 from gateway import auth
 from gateway.config import Config
@@ -57,6 +58,24 @@ class _DisconnectMiddleware:
             pass
 
 
+class NoSseStreamMiddleware:
+    """Answer GET /mcp with 405.
+
+    Stateless mode can't keep the standalone SSE stream open, so clients that
+    open it see it die and reconnect in a loop. 405 tells them (per the
+    streamable HTTP spec) that the server offers no such stream.
+    """
+
+    def __init__(self, app):
+        self._app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["method"] == "GET" and scope["path"].rstrip("/") == "/mcp":
+            await PlainTextResponse("Method Not Allowed", status_code=405, headers={"Allow": "POST"})(scope, receive, send)
+            return
+        await self._app(scope, receive, send)
+
+
 async def _run_http(mcp: FastMCP, config: Config) -> None:
     configure_logging(config)
     clients = auth.parse_clients(config.server.auth_tokens)
@@ -64,6 +83,7 @@ async def _run_http(mcp: FastMCP, config: Config) -> None:
         logger.warning("MCP HTTP auth DISABLED — set GATEWAY_SERVER__AUTH_TOKENS to require a bearer token on /mcp")
     app = mcp.streamable_http_app()
     app.router.routes.extend(reminders_http.routes)
+    app = NoSseStreamMiddleware(app)
     app = BearerAuthMiddleware(app, clients)
     if config.usage_log.enabled:
         app = UsageLogMiddleware(app, clients)
