@@ -60,7 +60,7 @@ def test_list_defaults_to_pending_and_summarises(fake):
     assert fake.requests[0].url.params["status"] == "pending"
     assert out == [{
         "id": "01ABC", "type": "reply", "status": "pending", "reason": None, "author": "Ada",
-        "author_url": "https://other.example/", "text": "Lovely", "on_page": "https://example.com/notes/x/",
+        "author_url": "https://other.example/", "text_from_sender": "Lovely", "on_page": "https://example.com/notes/x/",
         "from": "https://other.example/r/1", "received": "2026-10-18T09:00:00Z",
     }]
 
@@ -75,7 +75,7 @@ def test_list_passes_filters_through(fake):
 def test_long_text_is_cut(fake):
     fake.items = [item(content_text="word " * 300)]
 
-    text = json.loads(webmentions.list_webmentions())[0]["text"]
+    text = json.loads(webmentions.list_webmentions())[0]["text_from_sender"]
 
     assert len(text) <= 401 and text.endswith("…")
 
@@ -85,7 +85,7 @@ def test_missing_text_and_author_are_fine(fake):
 
     out = json.loads(webmentions.list_webmentions())[0]
 
-    assert (out["text"], out["author"], out["type"]) == ("", None, None)
+    assert (out["text_from_sender"], out["author"], out["type"]) == ("", None, None)
 
 
 @pytest.mark.parametrize("kwargs", [{"status": "maybe"}, {"type": "poke"}])
@@ -94,25 +94,24 @@ def test_bad_filters_are_refused_without_a_request(fake, kwargs):
     assert fake.requests == []
 
 
-def test_approve_and_reject(fake):
-    assert json.loads(webmentions.moderate_webmention("01ABC", "approved")) == {"id": "01ABC", "status": "approved"}
-    assert json.loads(webmentions.moderate_webmention("01ABC", "rejected"))["status"] == "rejected"
-    # Only the review is exposed: no trust, no block.
-    assert json.loads(fake.requests[0].content) == {"status": "approved"}
+def test_reject(fake):
+    assert json.loads(webmentions.reject_webmention("01ABC")) == {"id": "01ABC", "status": "rejected"}
+    assert json.loads(fake.requests[0].content) == {"status": "rejected"}
 
 
-def test_other_statuses_are_refused_without_a_request(fake):
-    out = json.loads(webmentions.moderate_webmention("01ABC", "deleted"))
-
-    assert "error" in out and fake.requests == []
+def test_approving_is_not_possible_from_here():
+    # A stranger's reply reaches the agent through list_webmentions; it must not be able to ask
+    # for its own approval.
+    assert not hasattr(webmentions, "moderate_webmention")
+    assert not hasattr(webmentions, "approve_webmention")
 
 
 def test_server_refusals_are_reported(fake):
-    fake.moderate_status = 409
+    fake.moderate_status = 404
 
-    out = json.loads(webmentions.moderate_webmention("01ABC", "approved"))
+    out = json.loads(webmentions.reject_webmention("01NOPE"))
 
-    assert "409" in out["error"] and "cannot be approved" in out["error"]
+    assert "404" in out["error"]
 
 
 def test_send(fake):
@@ -158,4 +157,4 @@ def test_only_the_review_and_send_tools_are_registered():
     rec = Recorder()
     webmentions.register(rec)
 
-    assert rec.names == ["list_webmentions", "moderate_webmention", "send_webmentions"]
+    assert rec.names == ["list_webmentions", "reject_webmention", "send_webmentions"]
