@@ -84,6 +84,7 @@ def create_post(post_type: str, properties: dict) -> str:
     if post_type not in POST_TYPES:
         return json.dumps({"error": f"Unknown post type {post_type!r}; use one of {', '.join(POST_TYPES)}"})
     props = dict(properties)
+    props["mp-post-type"] = post_type  # so a note with a title stays a note
     if post_type == "page":
         props["mp-channel"] = _PAGES_CHANNEL
     body = {"type": ["h-entry"], "properties": {k: _mf2_value(k, v) for k, v in props.items()}}

@@ -52,8 +52,17 @@ def fake():
 def test_create_post_sends_mf2_json_and_returns_urls(fake):
     out = json.loads(micropub.create_post("note", {"content": "Hello", "category": ["a", "b"]}))
 
-    assert fake.sent() == {"type": ["h-entry"], "properties": {"content": ["Hello"], "category": ["a", "b"]}}
+    assert fake.sent() == {
+        "type": ["h-entry"],
+        "properties": {"content": ["Hello"], "category": ["a", "b"], "mp-post-type": ["note"]},
+    }
     assert out == {"url": POST_URL, "status": "draft", "edit_url": f"{BASE}/posts/abc-123/edit"}
+
+
+def test_a_titled_note_says_it_is_a_note(fake):
+    micropub.create_post("note", {"name": "Short Title", "content": "Hello"})
+
+    assert fake.sent()["properties"]["mp-post-type"] == ["note"]  # else the server makes it an article
 
 
 def test_page_goes_to_its_channel(fake):
