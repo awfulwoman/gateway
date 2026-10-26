@@ -13,7 +13,7 @@ MCP server providing Claude Code access to personal services: email, Calendar (b
 | **Obsidian** | `list_notes`, `read_note`, `search_notes`, `create_note`, `update_note`, `append_to_note`, `move_note`, `delete_note` |
 | **Karakeep** | `search_bookmarks`, `get_bookmark`, `get_bookmark_content`, `create_bookmark`, `update_bookmark`, `attach_tags`, `detach_tags`, `list_tags`, `get_lists`, `create_list`, `add_to_list`, `remove_from_list` |
 | **OwnTracks** | `get_current_location`, `get_location_history`, `list_tracked_devices` |
-| **Issues** (GitHub `awfulwoman/meta`) | `list_issues`, `get_issue`, `create_issue`, `update_issue`, `delete_issue`, `add_issue_comment`, `add_checklist_item`, `toggle_checklist_item` |
+| **Issues** (GitHub `awfulwoman/meta`; meta's hourly sweep adds them to the [Cross-Project Overview](https://github.com/users/awfulwoman/projects/4) board, which owns Status) | `list_issues`, `get_issue`, `create_issue`, `update_issue`, `delete_issue`, `add_issue_comment`, `add_checklist_item`, `toggle_checklist_item` |
 | **eBay** (Browse API, read-only) | `get_ebay_listing`, `search_ebay` |
 
 ## Setup
