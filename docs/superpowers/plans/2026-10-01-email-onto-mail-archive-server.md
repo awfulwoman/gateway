@@ -1,6 +1,6 @@
 # §8: rewire email tools onto mail-archive-server
 
-**Issue:** gateway#3. **Spec:** `docs/superpowers/specs/2026-09-04-mail-archive-server-handoff.md`
+**Issue:** gateway#3. **Spec:** `meta/specs/gateway/2026-09-04-mail-archive-server-handoff.md`
 §8, filtered through §0's overrides (read §0 first — it wins where the two disagree).
 **Now unblocked:** mail-archive-server#1 (account-scoped sync, shipped) and #2
 (keyset cursor paging, shipped) both landed and are deployed and verified live.

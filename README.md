@@ -54,7 +54,7 @@ apple-reminders-server / apple-calendar-server, reached over HTTP via
 for Contacts/EventKit access), not in this container. All three work the same in the
 container as on macOS — no platform-specific dependency to exclude here. Mount
 `GATEWAY_OBSIDIAN__VAULT_PATH` as a volume so notes persist across container restarts. See
-[`docs/superpowers/specs/2026-07-19-docker-deployment-design.md`](docs/superpowers/specs/2026-07-19-docker-deployment-design.md)
+[`meta/specs/gateway/2026-07-19-docker-deployment-design.md`](https://github.com/awfulwoman/meta/blob/main/specs/gateway/2026-07-19-docker-deployment-design.md)
 for the design and
 [`docs/superpowers/plans/2026-07-19-docker-deployment.md`](docs/superpowers/plans/2026-07-19-docker-deployment.md)
 for the implementation plan (container image, Ansible role, host migration).
@@ -90,7 +90,7 @@ up here too, instead of only ever seeing writes that went through Gateway itself
 
 Unlike Reminders and Calendar, there's no offline-sync `/v1` API or LWW/tombstone
 contract for Contacts — see
-[`docs/superpowers/specs/2026-07-19-radicale-contacts-reminders-design.md`](docs/superpowers/specs/2026-07-19-radicale-contacts-reminders-design.md)
+[`meta/specs/gateway/2026-07-19-radicale-contacts-reminders-design.md`](https://github.com/awfulwoman/meta/blob/main/specs/gateway/2026-07-19-radicale-contacts-reminders-design.md)
 for the original Radicale-backed design this backend swap builds on.
 
 ## apple-reminders-server setup (Reminders)

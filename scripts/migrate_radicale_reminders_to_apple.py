@@ -11,7 +11,7 @@ Idempotent: Radicale UIDs are preserved as the new store's ids, so re-running ju
 no-ops on rows that haven't changed since (the store's LWW guard rejects an equal
 updated_at as stale). VTODO parsing here is a trimmed copy of the field mapping the
 old CalDAV-backed store.py used before this migration — see
-docs/superpowers/specs/2026-07-19-radicale-contacts-reminders-design.md for the
+meta/specs/gateway/2026-07-19-radicale-contacts-reminders-design.md for the
 original table. Not part of the gateway package - delete after use.
 
 Usage:

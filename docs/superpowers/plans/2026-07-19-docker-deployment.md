@@ -3,7 +3,7 @@
 ## Context
 
 Full design rationale lives in the companion spec:
-`docs/superpowers/specs/2026-07-19-docker-deployment-design.md`. In short: Gateway moves
+`meta/specs/gateway/2026-07-19-docker-deployment-design.md`. In short: Gateway moves
 off its macOS launchd deployment on Malcolm and runs as a Docker container on
 `server-64gb-storage`, deployed the same `composition-*` way as `memorybank`/`chives`.
 Storage becomes the sole host; the macOS-only Contacts tool is dropped.
