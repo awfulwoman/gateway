@@ -134,26 +134,26 @@ def test_jobs_logs_returns_raw_output(sem):
     assert "failed=1" in result["output"]
 
 
-def test_jobs_logs_masks_secrets_a_failing_task_printed(sem):
-    """A deploy runs with the vault unlocked, so this text reaches a caller that
-    reads all of it. The useful parts of the log must survive."""
+def test_jobs_logs_does_not_mangle_ordinary_values(sem):
+    """Masking is a last resort, not the control: playbooks must not print
+    secrets in the first place. Anything short of undoubted ciphertext is left
+    alone, so a log stays trustworthy."""
     fake, token = sem
     fake.seed_task(token, _task(101, 10, "failed"), output=(
         'TASK [debug] ******************************************\n'
         '"msg": "password: hunter2"\n'
         '"api_key": "abc123def"\n'
-        'vault_composition_semaphore_admin_password=letmein\n'
-        'commit 0123456789abcdef0123456789abcdef01234567\n'
+        "vault_composition_semaphore_admin_password=letmein\n"
+        "commit 0123456789abcdef0123456789abcdef01234567\n"
     ))
 
     output = json.loads(semaphore.jobs_logs(1, job_id=101))["output"]
 
-    assert "hunter2" not in output
-    assert "abc123def" not in output
-    assert "letmein" not in output
-    # The diagnostics worth reading are untouched.
+    assert "hunter2" in output
+    assert "abc123def" in output
+    assert "letmein" in output
     assert "0123456789abcdef0123456789abcdef01234567" in output
-    assert "TASK [debug]" in output
+    assert "<redacted" not in output
 
 
 def test_jobs_logs_masks_a_private_key_and_vault_blob(sem):
@@ -180,9 +180,8 @@ def test_jobs_logs_masks_a_private_key_and_vault_blob(sem):
 
 
 def test_jobs_logs_keeps_ansible_task_headers(sem):
-    """`TASK [role : name]` must survive. A role whose name contains
-    "password" otherwise reads as a key, with the " : " before the task name as
-    its separator, and the first word of every task name is eaten."""
+    """A role named after a secret must not turn its task headers into
+    redactions. A heuristic over `key: value` pairs did exactly that once."""
     fake, token = sem
     fake.seed_task(token, _task(104, 10, "success"), output=(
         "TASK [preflight-onepassword : Check the 1Password Connect token is set] ***\n"
@@ -197,15 +196,15 @@ def test_jobs_logs_keeps_ansible_task_headers(sem):
     assert "preflight-onepassword : Ask Connect for /health" in output
 
 
-def test_jobs_describe_masks_secrets_in_arguments(sem):
+def test_jobs_describe_returns_arguments_verbatim(sem):
     fake, token = sem
     fake.seed_task(token, _task(103, 10, "failed",
                                 arguments='["-e", "api_token=s3cr3t"]'))
 
     result = json.loads(semaphore.jobs_describe(1, job_id=103))
 
-    assert "s3cr3t" not in result["arguments"]
-    assert "api_token=" in result["arguments"]
+    # Verbatim: the caller supplied these, and mangling them hides what ran.
+    assert result["arguments"] == '["-e", "api_token=s3cr3t"]'
 
 
 # --- workflows_run / pipelines_stop -------------------------------------

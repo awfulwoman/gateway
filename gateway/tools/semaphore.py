@@ -26,14 +26,17 @@ _config: SemaphoreConfig | None = None
 _api: str = ""  # test override; production uses the config's base_url
 
 # A deploy runs with the vault unlocked, so a failing task can print a secret
-# into its log — and this module hands that log back as plain text, to a caller
-# that will read every character of it. Ansible's `no_log` covers the tasks
-# that remember to set it; these catch the rest.
+# into its log, and this module hands that log back as text to a caller that
+# reads every character of it.
 #
-# Deliberately conservative: nothing here keys off a bare long random string,
-# because that would also eat commit SHAs and task ids, which are the parts of
-# a log worth reading. It matches the two shapes a secret actually leaks in —
-# a dumped vault/PEM blob, and a `key: value` pair whose key names it one.
+# This is not the control. The control is that playbooks never render a vaulted
+# value into a task result without `no_log: true` — enforced for this repo by
+# scripts/validate-secret-logging.py. Masking here is a last resort, and
+# deliberately narrow: only the two shapes that cannot be anything else. A
+# heuristic over `key: value` pairs was tried and reverted; it turned
+# `TASK [preflight-onepassword : Check ...]` into `TASK [preflight-onepassword :
+# <redacted> ...]`, and a log you cannot trust is worse than one you must know
+# to be careful with.
 _REDACTIONS: list[tuple[re.Pattern, object]] = [
     # Ansible Vault ciphertext, as `ansible-vault view` or a dumped var prints it.
     (
@@ -47,30 +50,6 @@ _REDACTIONS: list[tuple[re.Pattern, object]] = [
             re.DOTALL,
         ),
         "<redacted: private key>",
-    ),
-    # password: hunter2 / token=abc / "api_key": "..." / vault_foo=...
-    # The key may sit inside a longer name (api_token, admin_password,
-    # vault_..._secret), so snake_case either side is absorbed. Both runs are
-    # bounded: an unbounded pair of star groups backtracks quadratically on a
-    # long line that contains no key name at all, and logs are long.
-    #
-    # The key must start a line or follow a quote, brace, comma or whitespace:
-    # that is what a real key=value sits after. Ansible's `TASK [role : name]`
-    # header is the reason — a role called `preflight-onepassword` otherwise
-    # reads as a key (or, starting after its hyphen, as `onepassword`), with the
-    # " : " before the task name as the separator, and the first word of every
-    # task name is redacted.
-    (
-        re.compile(
-            r"""(?ix)
-            (?:^|(?<=["'{,\s]))
-            ([a-z0-9_]{0,40}
-               (?:password|passwd|secret|token|api[_-]?key|access[_-]?key
-                 |private[_-]?key|client[_-]?secret|passphrase|vault)
-               [a-z0-9_]{0,20})\b
-            (\s*"?\s*[:=]\s*)("?)([^\s"',}]+)""",
-        ),
-        r"\1\2\3<redacted>",
     ),
 ]
 
