@@ -16,6 +16,7 @@ token is a Semaphore API token, not the admin password.
 from __future__ import annotations
 
 import json
+import re
 
 import httpx
 
@@ -23,6 +24,54 @@ from gateway.config import SemaphoreConfig
 
 _config: SemaphoreConfig | None = None
 _api: str = ""  # test override; production uses the config's base_url
+
+# A deploy runs with the vault unlocked, so a failing task can print a secret
+# into its log — and this module hands that log back as plain text, to a caller
+# that will read every character of it. Ansible's `no_log` covers the tasks
+# that remember to set it; these catch the rest.
+#
+# Deliberately conservative: nothing here keys off a bare long random string,
+# because that would also eat commit SHAs and task ids, which are the parts of
+# a log worth reading. It matches the two shapes a secret actually leaks in —
+# a dumped vault/PEM blob, and a `key: value` pair whose key names it one.
+_REDACTIONS: list[tuple[re.Pattern, object]] = [
+    # Ansible Vault ciphertext, as `ansible-vault view` or a dumped var prints it.
+    (
+        re.compile(r"\$ANSIBLE_VAULT;[^\n]*\n(?:[0-9a-f]{1,80}\n)+", re.MULTILINE),
+        "<redacted: ansible-vault>",
+    ),
+    # PEM private keys.
+    (
+        re.compile(
+            r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
+            re.DOTALL,
+        ),
+        "<redacted: private key>",
+    ),
+    # password: hunter2 / token=abc / "api_key": "..." / vault_foo=...
+    # The key may sit inside a longer name (api_token, admin_password,
+    # vault_..._secret), so snake_case either side is absorbed. Both runs are
+    # bounded: an unbounded pair of star groups backtracks quadratically on a
+    # long line that contains no key name at all, and logs are long.
+    (
+        re.compile(
+            r"""(?ix)
+            \b([a-z0-9_]{0,40}
+               (?:password|passwd|secret|token|api[_-]?key|access[_-]?key
+                 |private[_-]?key|client[_-]?secret|passphrase|vault)
+               [a-z0-9_]{0,20})\b
+            (\s*"?\s*[:=]\s*)("?)([^\s"',}]+)""",
+        ),
+        r"\1\2\3<redacted>",
+    ),
+]
+
+
+def _redact(text: str) -> str:
+    """Mask secrets in text this process is about to hand to a caller."""
+    for pattern, replacement in _REDACTIONS:
+        text = pattern.sub(replacement, text)
+    return text
 
 
 def init(config: SemaphoreConfig, api_url: str = "") -> None:
@@ -170,16 +219,22 @@ def pipeline_jobs(project_id: int, pipeline_id: int) -> str:
 
 def jobs_describe(project_id: int, job_id: int) -> str:
     """Describe a single task ("job"): status, playbook, environment, git branch,
-    message, arguments and params. `job_id` is the Semaphore task id."""
+    message, arguments and params. `job_id` is the Semaphore task id. Secrets in
+    the arguments and params are masked."""
     task = _get(f"/api/project/{project_id}/tasks/{job_id}")
-    return json.dumps(_task(task, full=True))
+    detail = _task(task, full=True)
+    for key in ("arguments", "params", "environment"):
+        if isinstance(detail.get(key), str):
+            detail[key] = _redact(detail[key])
+    return json.dumps(detail)
 
 
 def jobs_logs(project_id: int, job_id: int) -> str:
     """Fetch the raw log output of a task ("job") as plain text. `job_id` is the
-    Semaphore task id."""
+    Semaphore task id. Secrets a failing task prints are masked, since a deploy
+    runs with the vault unlocked."""
     text = _get_text(f"/api/project/{project_id}/tasks/{job_id}/raw_output")
-    return json.dumps({"task_id": job_id, "output": text})
+    return json.dumps({"task_id": job_id, "output": _redact(text)})
 
 
 def workflows_run(project_id: int, workflow_id: int, message: str = "",

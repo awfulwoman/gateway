@@ -185,6 +185,13 @@ All config via environment variables (or `.env` file):
 | `GATEWAY_WEBMENTIONS__TOKEN` | webmention-server's admin API token (`ADMIN_API_TOKEN`). The tools only list, reject and send; approving stays with the owner at `/admin`, because a stranger's text reaches the agent. They never touch rules or delete records |
 | `GATEWAY_SEMAPHORE__BASE_URL` | Ansible Semaphore UI URL (`https://semaphore.<domain>`), for the Semaphore tools (inspect runs, start and stop them) |
 | `GATEWAY_SEMAPHORE__TOKEN` | Semaphore API token (Bearer), minted under Admin → API Tokens in the Semaphore UI — not the admin password |
+
+A Semaphore run has the Ansible vault unlocked, so a failing task can print a
+secret into its log. `jobs_logs` and `jobs_describe` mask the shapes that
+actually leak — dumped vault/PEM blobs, and `key: value` pairs whose key names
+a secret — before returning them. That is best-effort defence in depth, not a
+boundary: the boundary is that no Semaphore template takes the playbook as a
+per-task override (see `composition-semaphore` in the infra repo).
 | `GATEWAY_SERVER__HOST` | SSE server bind address (default 127.0.0.1) |
 | `GATEWAY_SERVER__PORT` | SSE server port (default 4000) |
 | `GATEWAY_SERVER__AUTH_TOKENS` | Comma-separated bearer tokens required on `/mcp`. Each entry is `label:secret` (label names the caller in the usage log); a bare `secret` gets an auto label. Unset = auth disabled (startup warning). |

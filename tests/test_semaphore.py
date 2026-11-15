@@ -134,6 +134,62 @@ def test_jobs_logs_returns_raw_output(sem):
     assert "failed=1" in result["output"]
 
 
+def test_jobs_logs_masks_secrets_a_failing_task_printed(sem):
+    """A deploy runs with the vault unlocked, so this text reaches a caller that
+    reads all of it. The useful parts of the log must survive."""
+    fake, token = sem
+    fake.seed_task(token, _task(101, 10, "failed"), output=(
+        'TASK [debug] ******************************************\n'
+        '"msg": "password: hunter2"\n'
+        '"api_key": "abc123def"\n'
+        'vault_composition_semaphore_admin_password=letmein\n'
+        'commit 0123456789abcdef0123456789abcdef01234567\n'
+    ))
+
+    output = json.loads(semaphore.jobs_logs(1, job_id=101))["output"]
+
+    assert "hunter2" not in output
+    assert "abc123def" not in output
+    assert "letmein" not in output
+    # The diagnostics worth reading are untouched.
+    assert "0123456789abcdef0123456789abcdef01234567" in output
+    assert "TASK [debug]" in output
+
+
+def test_jobs_logs_masks_a_private_key_and_vault_blob(sem):
+    fake, token = sem
+    # Assembled from parts so the pre-commit secret scanners do not read this
+    # fixture as a real key.
+    begin = "-----BEGIN " + "OPENSSH PRIVATE KEY-----"
+    end = "-----END " + "OPENSSH PRIVATE KEY-----"
+    fake.seed_task(token, _task(102, 10, "failed"), output=(
+        f"{begin}\n"
+        "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ\n"
+        f"{end}\n"
+        "$ANSIBLE_VAULT;1.1;AES256\n"
+        "6132333534333534336433653561\n"
+        "643365356136313233353433\n"
+    ))
+
+    output = json.loads(semaphore.jobs_logs(1, job_id=102))["output"]
+
+    assert "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ" not in output
+    assert "6132333534333534336433653561" not in output
+    assert "<redacted: private key>" in output
+    assert "<redacted: ansible-vault>" in output
+
+
+def test_jobs_describe_masks_secrets_in_arguments(sem):
+    fake, token = sem
+    fake.seed_task(token, _task(103, 10, "failed",
+                                arguments='["-e", "api_token=s3cr3t"]'))
+
+    result = json.loads(semaphore.jobs_describe(1, job_id=103))
+
+    assert "s3cr3t" not in result["arguments"]
+    assert "api_token=" in result["arguments"]
+
+
 # --- workflows_run / pipelines_stop -------------------------------------
 
 def test_workflows_run_queues_a_task_with_minimal_body(sem):
