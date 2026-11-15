@@ -53,10 +53,18 @@ _REDACTIONS: list[tuple[re.Pattern, object]] = [
     # vault_..._secret), so snake_case either side is absorbed. Both runs are
     # bounded: an unbounded pair of star groups backtracks quadratically on a
     # long line that contains no key name at all, and logs are long.
+    #
+    # The key must start a line or follow a quote, brace, comma or whitespace:
+    # that is what a real key=value sits after. Ansible's `TASK [role : name]`
+    # header is the reason — a role called `preflight-onepassword` otherwise
+    # reads as a key (or, starting after its hyphen, as `onepassword`), with the
+    # " : " before the task name as the separator, and the first word of every
+    # task name is redacted.
     (
         re.compile(
             r"""(?ix)
-            \b([a-z0-9_]{0,40}
+            (?:^|(?<=["'{,\s]))
+            ([a-z0-9_]{0,40}
                (?:password|passwd|secret|token|api[_-]?key|access[_-]?key
                  |private[_-]?key|client[_-]?secret|passphrase|vault)
                [a-z0-9_]{0,20})\b

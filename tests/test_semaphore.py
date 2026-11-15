@@ -179,6 +179,24 @@ def test_jobs_logs_masks_a_private_key_and_vault_blob(sem):
     assert "<redacted: ansible-vault>" in output
 
 
+def test_jobs_logs_keeps_ansible_task_headers(sem):
+    """`TASK [role : name]` must survive. A role whose name contains
+    "password" otherwise reads as a key, with the " : " before the task name as
+    its separator, and the first word of every task name is eaten."""
+    fake, token = sem
+    fake.seed_task(token, _task(104, 10, "success"), output=(
+        "TASK [preflight-onepassword : Check the 1Password Connect token is set] ***\n"
+        "ok: [camina -> localhost]\n"
+        "TASK [preflight-onepassword : Ask Connect for /health] ***\n"
+        "ok: [camina -> localhost]\n"
+    ))
+
+    output = json.loads(semaphore.jobs_logs(1, job_id=104))["output"]
+
+    assert "preflight-onepassword : Check the 1Password Connect token is set" in output
+    assert "preflight-onepassword : Ask Connect for /health" in output
+
+
 def test_jobs_describe_masks_secrets_in_arguments(sem):
     fake, token = sem
     fake.seed_task(token, _task(103, 10, "failed",
