@@ -4,6 +4,9 @@ import uuid
 import httpx
 from gateway.config import RemindersServerConfig
 
+# Must match apple-reminders-server, which rejects timestamps without fractional seconds.
+_TS_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
+
 _config: RemindersServerConfig | None = None
 _client: httpx.Client | None = None
 
@@ -25,21 +28,21 @@ def init(config: RemindersServerConfig) -> None:
 
 
 def now_utc() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(timezone.utc).strftime(_TS_FORMAT)
 
 
 def now_after(previous: str) -> str:
     """A timestamp strictly after `previous`: now_utc() if the wall clock has already
-    moved past it, else `previous` + 1 second. Local writers minting a fresh
+    moved past it, else `previous` + 1 microsecond. Local writers minting a fresh
     updated_at for an edit should use this instead of bare now_utc() — two edits to
-    the same reminder within one wall-clock second would otherwise collide and the
+    the same reminder within one wall-clock microsecond would otherwise collide and the
     second (legitimately later) one would be spuriously rejected by upsert's LWW
     guard, which correctly treats an equal updated_at as stale."""
     now = now_utc()
     if now > previous:
         return now
-    dt = datetime.strptime(previous, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    return (dt + timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    dt = datetime.strptime(previous, _TS_FORMAT).replace(tzinfo=timezone.utc)
+    return (dt + timedelta(microseconds=1)).strftime(_TS_FORMAT)
 
 
 def new_id() -> str:

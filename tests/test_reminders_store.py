@@ -198,14 +198,20 @@ def test_gc_tombstones_leaves_non_deleted_rows(db):
     assert db.get(r["id"]) is not None
 
 
-def test_now_after_bumps_a_second_when_clock_has_not_advanced(db):
-    result = store.now_after("9999-01-01T00:00:00Z")
-    assert result == "9999-01-01T00:00:01Z"
+def test_now_utc_matches_server_microsecond_format(db):
+    # apple-reminders-server rejects timestamps without fractional seconds
+    from datetime import datetime
+    datetime.strptime(store.now_utc(), "%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def test_now_after_bumps_a_microsecond_when_clock_has_not_advanced(db):
+    result = store.now_after("9999-01-01T00:00:00.000000Z")
+    assert result == "9999-01-01T00:00:00.000001Z"
 
 
 def test_now_after_uses_wall_clock_when_it_has_advanced(db):
-    result = store.now_after("2020-01-01T00:00:00Z")
-    assert result > "2020-01-01T00:00:00Z"
+    result = store.now_after("2020-01-01T00:00:00.000000Z")
+    assert result > "2020-01-01T00:00:00.000000Z"
 
 
 def test_soft_delete_bumps_timestamp_to_avoid_same_second_collision(db):
