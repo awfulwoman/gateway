@@ -80,6 +80,17 @@ class OwnTracksConfig(BaseModel):
     owntracks_device: str = ""
 
 
+class SemaphoreConfig(BaseModel):
+    """Ansible Semaphore UI on camina — inspect projects, task templates
+    (the "workflows"), task runs (the "pipelines"/"jobs") and their logs, and
+    start or stop runs. `token` is a Semaphore API token (Bearer), minted under
+    Admin → API Tokens in the Semaphore UI; the admin *password* and the
+    `fleet_key` access key the infra role stores are not interchangeable with
+    it."""
+    base_url: str = ""
+    token: str = ""
+
+
 class RemindersConfig(BaseModel):
     api_tokens: Annotated[list[str], NoDecode] = []
     nominatim_url: str = ""
@@ -155,6 +166,7 @@ class Config(BaseSettings):
     micropub: MicropubConfig = MicropubConfig()
     webmentions: WebmentionsConfig = WebmentionsConfig()
     owntracks: OwnTracksConfig = OwnTracksConfig()
+    semaphore: SemaphoreConfig = SemaphoreConfig()
     reminders: RemindersConfig = RemindersConfig()
     radicale: RadicaleConfig = RadicaleConfig()
     reminders_server: RemindersServerConfig = RemindersServerConfig()

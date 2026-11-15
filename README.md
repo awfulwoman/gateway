@@ -2,7 +2,7 @@
 
 MCP server providing Claude Code access to personal services: email, Calendar (backed by real Apple Calendar via [apple-calendar-server](https://github.com/awfulwoman/apple-calendar-server)), Contacts (backed by real macOS Contacts via [apple-contacts-server](https://github.com/awfulwoman/apple-contacts-server)), Reminders (backed by real Apple Reminders via [apple-reminders-server](https://github.com/awfulwoman/apple-reminders-server)), an Obsidian vault, Karakeep bookmarks, OwnTracks location, issues (GitHub issues in the `awfulwoman/meta` repo), and eBay listings (read-only, via eBay's Browse API).
 
-## Tools (57 total)
+## Tools (76 total)
 
 | Group | Tools |
 |---|---|
@@ -13,6 +13,7 @@ MCP server providing Claude Code access to personal services: email, Calendar (b
 | **Obsidian** | `list_notes`, `read_note`, `search_notes`, `create_note`, `update_note`, `append_to_note`, `move_note`, `delete_note` |
 | **Karakeep** | `search_bookmarks`, `get_bookmark`, `get_bookmark_content`, `create_bookmark`, `update_bookmark`, `attach_tags`, `detach_tags`, `list_tags`, `get_lists`, `create_list`, `add_to_list`, `remove_from_list` |
 | **OwnTracks** | `get_current_location`, `get_location_history`, `list_tracked_devices` |
+| **Semaphore** (Ansible Semaphore UI) | `projects_list`, `projects_search`, `workflows_search`, `pipelines_list`, `pipeline_jobs`, `jobs_describe`, `jobs_logs`, `workflows_run`, `pipelines_stop` |
 | **Issues** (GitHub `awfulwoman/meta`; meta's hourly sweep adds them to the [Cross-Project Overview](https://github.com/users/awfulwoman/projects/4) board, which owns Status) | `list_issues`, `get_issue`, `create_issue`, `update_issue`, `delete_issue`, `add_issue_comment`, `add_checklist_item`, `toggle_checklist_item` |
 | **eBay** (Browse API, read-only) | `get_ebay_listing`, `search_ebay` |
 
@@ -182,6 +183,8 @@ All config via environment variables (or `.env` file):
 | `GATEWAY_MICROPUB__TOKEN` | micropub-server access token with scopes `draft update media` and no `delete` (make it with `micropub-server token --scope "draft update media"`), so agents can only create and edit drafts |
 | `GATEWAY_WEBMENTIONS__BASE_URL` | webmention-server URL (`https://webmention.awfulwoman.com`), for the Webmention review tools |
 | `GATEWAY_WEBMENTIONS__TOKEN` | webmention-server's admin API token (`ADMIN_API_TOKEN`). The tools only list, reject and send; approving stays with the owner at `/admin`, because a stranger's text reaches the agent. They never touch rules or delete records |
+| `GATEWAY_SEMAPHORE__BASE_URL` | Ansible Semaphore UI URL (`https://semaphore.<domain>`), for the Semaphore tools (inspect runs, start and stop them) |
+| `GATEWAY_SEMAPHORE__TOKEN` | Semaphore API token (Bearer), minted under Admin → API Tokens in the Semaphore UI — not the admin password |
 | `GATEWAY_SERVER__HOST` | SSE server bind address (default 127.0.0.1) |
 | `GATEWAY_SERVER__PORT` | SSE server port (default 4000) |
 | `GATEWAY_SERVER__AUTH_TOKENS` | Comma-separated bearer tokens required on `/mcp`. Each entry is `label:secret` (label names the caller in the usage log); a bare `secret` gets an auto label. Unset = auth disabled (startup warning). |

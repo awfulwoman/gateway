@@ -12,7 +12,7 @@ from gateway import auth
 from gateway.config import Config
 from gateway.http_auth import BearerAuthMiddleware
 from gateway.reminders import http as reminders_http
-from gateway.tools import calendar, contacts, reminders, email, obsidian, karakeep, owntracks, issues, repos, ebay, micropub, webmentions
+from gateway.tools import calendar, contacts, reminders, email, obsidian, karakeep, owntracks, issues, repos, ebay, micropub, webmentions, semaphore
 from gateway.usage import UsageLogMiddleware
 
 logger = logging.getLogger("gateway")
@@ -120,6 +120,9 @@ def create_server(config: Config) -> FastMCP:
 
     owntracks.init(config.owntracks)
     owntracks.register(mcp)
+
+    semaphore.init(config.semaphore)
+    semaphore.register(mcp)
 
     issues.init(config.github)
     issues.register(mcp)

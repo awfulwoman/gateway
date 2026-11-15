@@ -7,9 +7,10 @@ import pytest
 import uvicorn
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse, PlainTextResponse
+from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 from gateway.reminders.store import now_after, now_utc
+from gateway.calendar_server.store import now_after as cal_now_after, now_utc as cal_now_utc
 
 
 def _free_port() -> int:
@@ -357,7 +358,7 @@ class _FakeCalendarServer:
         if since:
             results = [e for e in results if e["updated_at"] > since]
         results.sort(key=lambda e: e["updated_at"])
-        return JSONResponse({"server_time": now_utc(), "events": results})
+        return JSONResponse({"server_time": cal_now_utc(), "events": results})
 
     async def get_event(self, request: Request) -> JSONResponse:
         token = self._authorized(request)
@@ -407,7 +408,7 @@ class _FakeCalendarServer:
         body = {}
         if await request.body():
             body = await request.json()
-        updated_at = body.get("updated_at") or now_after(existing["updated_at"])
+        updated_at = body.get("updated_at") or cal_now_after(existing["updated_at"])
         if updated_at <= existing["updated_at"]:
             return JSONResponse({"current": existing}, status_code=409)
 
@@ -850,4 +851,114 @@ def ebay_server():
 
 @pytest.fixture
 def ebay_client_id() -> str:
+    return f"test-{uuid.uuid4().hex[:8]}"
+
+
+class _FakeSemaphore:
+    """The read-only slice of Ansible Semaphore UI's REST API that
+    gateway/tools/semaphore.py calls: the project list, a project's task
+    templates, a project's tasks (runs), one task, and its raw output. Keyed
+    by bearer token so each test seeds its own data without restarting the
+    server, mirroring `_FakeGitHubRepos`."""
+
+    def __init__(self):
+        self._by_token: dict[str, dict] = {}
+
+    def _token_db(self, token: str) -> dict:
+        return self._by_token.setdefault(
+            token, {"projects": [], "templates": [], "tasks": [], "output": {}, "runs": [], "stops": []}
+        )
+
+    def _db(self, request: Request) -> dict:
+        return self._token_db(request.headers.get("authorization", "")[len("Bearer "):])
+
+    def seed_project(self, token: str, project: dict) -> None:
+        self._token_db(token)["projects"].append(project)
+
+    def seed_template(self, token: str, template: dict) -> None:
+        self._token_db(token)["templates"].append(template)
+
+    def seed_task(self, token: str, task: dict, output: str = "") -> None:
+        self._token_db(token)["tasks"].append(task)
+        self._token_db(token)["output"][task["id"]] = output
+
+    async def projects(self, request: Request) -> JSONResponse:
+        return JSONResponse(self._db(request)["projects"])
+
+    async def templates(self, request: Request) -> JSONResponse:
+        return JSONResponse(self._db(request)["templates"])
+
+    async def tasks(self, request: Request) -> JSONResponse:
+        return JSONResponse(self._db(request)["tasks"])
+
+    async def task(self, request: Request) -> JSONResponse:
+        db = self._db(request)
+        task_id = int(request.path_params["task_id"])
+        for t in db["tasks"]:
+            if t["id"] == task_id:
+                return JSONResponse(t)
+        return JSONResponse({"message": "task not found"}, status_code=404)
+
+    async def run_task(self, request: Request) -> JSONResponse:
+        db = self._db(request)
+        body = await request.json()
+        db["runs"].append(body)
+        task_id = max([t["id"] for t in db["tasks"]], default=0) + 1
+        task = {"id": task_id, "template_id": body.get("template_id"), "status": "waiting",
+                "playbook": body.get("playbook", ""), "message": body.get("message", ""),
+                "git_branch": body.get("git_branch", "")}
+        db["tasks"].append(task)
+        db["output"][task_id] = ""
+        return JSONResponse(task, status_code=201)
+
+    async def stop_task(self, request: Request):
+        db = self._db(request)
+        body = await request.json() if await request.body() else {}
+        db["stops"].append({"task_id": int(request.path_params["task_id"]), **body})
+        return Response(status_code=204)
+
+    async def raw_output(self, request: Request):
+        db = self._db(request)
+        task_id = int(request.path_params["task_id"])
+        text = db["output"].get(task_id)
+        if text is None:
+            return JSONResponse({"message": "task not found"}, status_code=404)
+        return PlainTextResponse(text)
+
+    def app(self) -> Starlette:
+        return Starlette(routes=[
+            Route("/api/projects", self.projects, methods=["GET"]),
+            Route("/api/project/{project_id}/templates", self.templates, methods=["GET"]),
+            Route("/api/project/{project_id}/tasks", self.tasks, methods=["GET"]),
+            Route("/api/project/{project_id}/tasks", self.run_task, methods=["POST"]),
+            Route("/api/project/{project_id}/tasks/{task_id}", self.task, methods=["GET"]),
+            Route("/api/project/{project_id}/tasks/{task_id}/stop", self.stop_task, methods=["POST"]),
+            Route("/api/project/{project_id}/tasks/{task_id}/raw_output", self.raw_output, methods=["GET"]),
+        ])
+
+
+@pytest.fixture(scope="session")
+def semaphore_server():
+    port = _free_port()
+    fake = _FakeSemaphore()
+    server = uvicorn.Server(uvicorn.Config(fake.app(), host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    base_url = f"http://127.0.0.1:{port}"
+    for _ in range(100):
+        if server.started:
+            break
+        time.sleep(0.05)
+    else:
+        raise RuntimeError("fake semaphore server did not start in time")
+
+    yield base_url, fake
+
+    server.should_exit = True
+    thread.join(timeout=5)
+
+
+@pytest.fixture
+def semaphore_token() -> str:
     return f"test-{uuid.uuid4().hex[:8]}"
